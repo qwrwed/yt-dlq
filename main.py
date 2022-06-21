@@ -1,4 +1,5 @@
 import os
+from pprint import pprint
 
 import PySimpleGUI as sg
 
@@ -26,6 +27,7 @@ layout = [
             size=(60, 20),
             default_text=multiline_text_prev,
             enable_events=True,
+            rstrip=False,
         )
     ],
     [sg.Button("Save")],
@@ -38,7 +40,9 @@ while True:
     if event == sg.WIN_CLOSED:
         break
 
-    multiline_text_curr = values["-ML-"]
+    multiline_text_curr = values["-ML-"][:-1]
+    # removes inexplicable additional newline not in input
+
     if event == "Save":
         with open(INPUT_FILE, "w") as f:
             f.write(multiline_text_curr)
