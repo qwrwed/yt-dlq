@@ -128,4 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+youtube-dl.exe
 yt-dlp.exe
+ffmpeg.exe

@@ -1,10 +1,15 @@
-def download(url, filename):
+import functools
+import pathlib
+import shutil
+
+import requests
+from tqdm.auto import tqdm
+
+def download(url, filename, verbose=True):
     # https://stackoverflow.com/a/63831344
-    import functools
-    import pathlib
-    import shutil
-    import requests
-    from tqdm.auto import tqdm
+
+    if verbose:
+        print(f"Downloading {url} to {filename}")
 
     r = requests.get(url, stream=True, allow_redirects=True)
     if r.status_code != 200:
