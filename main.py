@@ -5,20 +5,19 @@ import subprocess
 
 import PySimpleGUI as sg
 
-from utils import download
 
 INPUT_FILE = os.path.join("data", "to_download.txt")
-DOWNLOAD_ARCHIVE = os.path.join("data, download_archive.txt")
+DOWNLOAD_ARCHIVE = os.path.join("data", "download_archive.txt")
+DOWNLOAD_FOLDER = "data"
 WINDOW_TITLE = "Window Title"
 
 
-def download_binary():
-    binary_url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
-    download(binary_url, binary_url.split("/")[-1])
-
-
 def get_sub_urls(url_channel):
-    return " ".join([url_channel + subpath for subpath in ("/playlists", "/videos")])
+    if url_channel:
+        return " ".join(
+            [url_channel + subpath for subpath in ("/playlists", "/videos")]
+        )
+    return ""
 
 
 def ml_conv(urls):
@@ -97,7 +96,7 @@ def run_cmd_subprocess(cmd: list):
     return lines
 
 
-def run_cmd_sg(cmd):
+def run_cmd_sg(cmd: list):
     sp = sg.execute_command_subprocess(*cmd, wait=False, pipe_output=True)
     print(f">>> {sp.args}")
     window.Refresh()
@@ -132,15 +131,35 @@ while True:
         for line in urls_conv.split("\n"):
             playlist_url, videos_url = line.split()
             # playlists
-            cmd = [
+            cmd_playlist = [
                 "yt-dlp.exe",
-                "-o",
-                "%(playlist)s/%(playlist_index)s - %(title)s.%(ext)s",
+                "-o", os.path.join(DOWNLOAD_FOLDER, "%(playlist_uploader)s", "%(playlist)s", "%(title)s[%(id)s].%(ext)s"),
+                "-f140",
+                "--add-metadata",
+                "--restrict-filenames",
+                "--parse-metadata", "playlist_title:%(album)s",
+                "--parse-metadata", "uploader:%(artist)s",
+                "--parse-metadata", "playlist_uploader:%(album_artist)s",
+                "--parse-metadata", "playlist_index:%(track_number)s",
+                "--download-archive", DOWNLOAD_ARCHIVE,
                 playlist_url,
             ]
-
-            res = run_cmd_subprocess(cmd)
+            run_cmd_subprocess(cmd_playlist)
             # info = [json.loads(line) for line in run_cmd_subprocess(f"yt-dlp.exe -j --flat-playlist {url}")]
 
+            # other videos
+            cmd_videos = [
+                "yt-dlp.exe",
+                "-o", os.path.join(DOWNLOAD_FOLDER, "%(uploader)s", "%(title)s[%(id)s].%(ext)s"),
+                "-f140",
+                "--add-metadata",
+                "--restrict-filenames",
+                "--parse-metadata", "%(uploader)s - [Videos]:%(album)s",
+                "--parse-metadata", "%(uploader)s:%(album_artist)s",
+                "--download-archive", DOWNLOAD_ARCHIVE,
+                videos_url,
+            ]
+            run_cmd_subprocess(cmd_videos)
+            print("*** DONE ***")
 
 window.close()
