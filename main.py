@@ -88,7 +88,7 @@ def run_cmd_subprocess(cmd: list):
     window.Refresh()
     lines = []
     for line in iter(p.stdout.readline, b""):
-        line_decoded = line.rstrip().decode()
+        line_decoded = line.rstrip().decode(errors="replace")
         print(line_decoded)
         window.Refresh()
         lines.append(line_decoded)
@@ -160,6 +160,6 @@ while True:
                 videos_url,
             ]
             run_cmd_subprocess(cmd_videos)
-            print("*** DONE ***")
+        print("*** DONE ***")
 
 window.close()
