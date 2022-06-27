@@ -9,6 +9,8 @@ import sys
 import PySimpleGUI as sg
 from yt_dlp.utils import sanitize_filename
 
+from utils import input_popup
+
 INPUT_FILE = os.path.join("data", "to_download.txt")
 DOWNLOAD_FOLDER = "data"
 WINDOW_TITLE = "Window Title"
@@ -32,65 +34,6 @@ def ml_conv(urls):
     )
 
 
-assert not isinstance(
-    sys.__stdout__.buffer, io.BufferedWriter
-), "must run with -u flag for download progress"
-
-with open(INPUT_FILE) as f:
-    multiline_text_prev = f.read()
-
-# sg.theme('DarkGrey9')
-col1 = sg.Column(
-    [
-        [
-            sg.Multiline(
-                key="-MLI-",
-                size=(60, 20),
-                default_text=multiline_text_prev,
-                enable_events=True,
-                rstrip=False,
-            )
-        ],
-        [sg.Button("Save")],
-    ]
-)
-col2 = sg.Column(
-    [
-        [
-            sg.Multiline(
-                key="-MLO-",
-                size=(60, 20),
-                default_text=ml_conv(multiline_text_prev),
-                font=("Courier", 11),
-                rstrip=False,
-                write_only=True,
-                disabled=True,
-                horizontal_scroll=True,
-            )
-        ],
-        [sg.Button("Download")],
-    ]
-)
-
-layout = [
-    [col1, col2],
-    [
-        # sg.Output(
-        #     key="-OUT-",
-        #     expand_x=True,
-        #     size=(80, 15),
-        #     font=("Courier", 11),
-        #     background_color="black",
-        #     text_color="white",
-        #     echo_stdout_stderr=True,
-        # )
-    ],
-]
-
-window = sg.Window(WINDOW_TITLE, layout, finalize=True)
-window["-MLO-"].Widget.config(bg="lightgray", fg="#777777")
-
-
 def escape_spaces(arg, use_singlequote=False):
     quote = "'" if use_singlequote else "'"
     return (
@@ -103,9 +46,11 @@ def escape_spaces(arg, use_singlequote=False):
 def run_cmd_subprocess(cmd: list, quiet=False):
     cmd_string = " ".join([escape_spaces(arg) for arg in cmd])
     print(f">>> {cmd_string}")
-    window.Refresh()
+    # window.Refresh()
 
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    # process = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr)
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=sys.stderr)
     out = b""
     for c in iter(lambda: process.stdout.read(1), b""):
         if not quiet:
@@ -161,124 +106,225 @@ def get_video_cmd(video_url, download_dir, album, track=None):
         "-f140",
         "--add-metadata",
         "--restrict-filenames",
-        "--parse-metadata", f"uploader:%(artist)s",
+        "--parse-metadata", "uploader:%(artist)s",
         "--ppa", ppa_arg,
         video_url,
     ]
 
 
-while True:
-    event, values = window.read()
+def get_info_cmd(url):
+    return [
+        "yt-dlp.exe",
+        "-J",
+        "--flat-playlist",
+        url,
+    ]
 
-    if event == sg.WIN_CLOSED:
-        break
 
-    multiline_text_curr = values["-MLI-"][:-1]
-    # removes inexplicable additional newline not in input
+assert not isinstance(
+    sys.__stdout__.buffer, io.BufferedWriter
+), "must run with -u flag for download progress"
 
-    if event == "Save":
-        with open(INPUT_FILE, "w") as f:
-            f.write(multiline_text_curr)
-        multiline_text_prev = multiline_text_curr
+url_correction_map = {}
 
-    if multiline_text_curr != multiline_text_prev:
-        window.set_title(f"{WINDOW_TITLE}*")
-    else:
-        window.set_title(f"{WINDOW_TITLE}")
+if __name__ == "__main__":
+    with open(INPUT_FILE) as f:
+        multiline_text_prev = f.read()
 
-    urls_conv = ml_conv(multiline_text_curr)
-    window["-MLO-"].update(urls_conv)
+    # sg.theme('DarkGrey9')
+    col1 = sg.Column(
+        [
+            [
+                sg.Multiline(
+                    key="-MLI-",
+                    size=(60, 20),
+                    font=("Courier", 11),
+                    default_text=multiline_text_prev,
+                    enable_events=True,
+                    rstrip=False,
+                    horizontal_scroll=True,
+                )
+            ],
+            [sg.Button("Save")],
+        ]
+    )
+    col2 = sg.Column(
+        [
+            [
+                sg.Multiline(
+                    key="-MLO-",
+                    size=(60, 20),
+                    default_text=ml_conv(multiline_text_prev),
+                    font=("Courier", 11),
+                    rstrip=False,
+                    write_only=True,
+                    disabled=True,
+                    horizontal_scroll=True,
+                )
+            ],
+            [sg.Button("Download")],
+        ]
+    )
 
-    if event == "Download":
-        for line in urls_conv.split("\n"):
+    layout = [
+        [col1, col2],
+        [
+            # sg.Output(
+            #     key="-OUT-",
+            #     expand_x=True,
+            #     size=(80, 15),
+            #     font=("Courier", 11),
+            #     background_color="black",
+            #     text_color="white",
+            #     echo_stdout_stderr=True,
+            # )
+        ],
+    ]
 
-            videos_url, playlists_url = line.split()
+    window = sg.Window(WINDOW_TITLE, layout, finalize=True)
+    window["-MLO-"].Widget.config(bg="lightgray", fg="#777777")
 
-            cmd_info = [
-                "yt-dlp.exe",
-                "-J",
-                "--flat-playlist",
-            ]
-            cmd_channel_videos_info = cmd_info + [videos_url]
-            cmd_playlist_info = cmd_info + [playlists_url]
+    while True:
+        event, values = window.read()
 
-            channel_videos_info = json.loads(
-                run_cmd_subprocess(cmd_channel_videos_info, quiet=True)
-            )
-            playlists_info = json.loads(
-                run_cmd_subprocess(cmd_playlist_info, quiet=True)
-            )
+        if event == sg.WIN_CLOSED:
+            break
 
-            channel_title = channel_videos_info["channel"]
+        multiline_text_curr = values["-MLI-"][:-1]
+        # removes inexplicable additional newline not in input
 
-            channel_dir = os.path.join(
-                DOWNLOAD_FOLDER, restrict_filename(channel_title)
-            )
-            Path(channel_dir).mkdir(parents=True, exist_ok=True)
-            videos_archive_filename = restrict_filename(
-                f"videos_{channel_videos_info['channel']}.txt"
-            )
-            videos_archive_filepath = os.path.join(channel_dir, videos_archive_filename)
+        if event == "Save":
+            with open(INPUT_FILE, "w") as f:
+                f.write(multiline_text_curr)
+            multiline_text_prev = multiline_text_curr
 
-            for p in playlists_info["entries"]:
-                playlist_url = p["url"]
-                playlist_title = p["title"]
+        if multiline_text_curr != multiline_text_prev:
+            window.set_title(f"{WINDOW_TITLE}*")
+        else:
+            window.set_title(f"{WINDOW_TITLE}")
 
-                playlist_dir = os.path.join(
-                    channel_dir, restrict_filename(playlist_title)
+        urls_conv = ml_conv(multiline_text_curr)
+        window["-MLO-"].update(urls_conv)
+
+        if event == "Download":
+            window.close()
+            for line in urls_conv.split("\n"):
+
+                videos_url, playlists_url = line.split()
+
+                cmd_playlist_info = get_info_cmd(playlists_url)
+
+                cmd_channel_videos_info = get_info_cmd(videos_url)
+                cmd_output = run_cmd_subprocess(cmd_channel_videos_info, quiet=True)
+                channel_videos_info = json.loads(cmd_output)
+
+                playlists_info = json.loads(
+                    run_cmd_subprocess(cmd_playlist_info, quiet=True)
                 )
 
-                playlist_archive_filename = restrict_filename(
-                    f"playlist_{p['title']}.txt"
-                )
-                playlist_archive_filepath = os.path.join(
-                    channel_dir, playlist_archive_filename
-                )
+                channel_title = channel_videos_info["channel"]
 
-                cmd_playlist_videos_info = cmd_info + [playlist_url]
-                playlist_videos_info = json.loads(
-                    run_cmd_subprocess(cmd_playlist_videos_info, quiet=True)
+                channel_dir = os.path.join(
+                    DOWNLOAD_FOLDER, restrict_filename(channel_title)
                 )
+                Path(channel_dir).mkdir(parents=True, exist_ok=True)
+                videos_archive_filename = restrict_filename(
+                    f"videos_{channel_videos_info['channel']}.txt"
+                )
+                videos_archive_filepath = os.path.join(
+                    channel_dir, videos_archive_filename
+                )
+                entries_playlists = playlists_info[
+                    "entries"
+                ]  # each entry is either a playlist or a group of playlists
 
-                for i, v in enumerate(playlist_videos_info["entries"]):
+                while len(entries_playlists) > 0:
+                    p = entries_playlists.pop(0)
+                    playlist_url = p["url"]
+                    if playlist_url.startswith(
+                        playlists_url
+                    ):  # not a playlist, but a category of playlists
 
-                    if already_in_archive(v, playlist_archive_filepath):
+                        cmd_sub_playlist_info = get_info_cmd(playlist_url)
+                        cmd_output = run_cmd_subprocess(
+                            cmd_sub_playlist_info, quiet=True
+                        )
+                        sub_playlists_info = json.loads(cmd_output)
+
+                        sub_playlist_urls = [
+                            entry["url"] for entry in sub_playlists_info["entries"]
+                        ]
+                        if playlist_url in sub_playlist_urls:
+                            # playlist group contains itself?
+
+                            # if playlist_url in url_correction_map:
+                            #     p["url"] = url_correction_map[playlist_url]
+                            # else:
+
+                            ERROR_MSG = f"""Youtube failed to redirect playlist link.
+    Please replace the URL below with the corrected URL.
+    Go to the link below, navigate to {p["title"]!r} from the dropdown menu, and use that URL instead."""
+                            p["url"] = input_popup(ERROR_MSG, playlist_url)
+
+                            entries_playlists.append(p)
+                        else:
+                            entries_playlists.extend(sub_playlists_info["entries"])
+                    else:  # standard playlist
+                        playlist_title = p["title"]
+
+                        playlist_dir = os.path.join(
+                            channel_dir, restrict_filename(playlist_title)
+                        )
+
+                        playlist_archive_filename = restrict_filename(
+                            f"playlist_{p['title']}.txt"
+                        )
+                        playlist_archive_filepath = os.path.join(
+                            channel_dir, playlist_archive_filename
+                        )
+
+                        cmd_playlist_videos_info = get_info_cmd(playlist_url)
+                        cmd_output = run_cmd_subprocess(
+                            cmd_playlist_videos_info, quiet=True
+                        )
+                        playlist_videos_info = json.loads(cmd_output)
+
+                        for i, v in enumerate(playlist_videos_info["entries"]):
+
+                            if already_in_archive(v, playlist_archive_filepath):
+                                print(
+                                    f"{v['id']} {v['title']!r} already in {playlist_archive_filename}"
+                                )
+                                continue
+
+                            cmd_playlist_video = get_video_cmd(
+                                v["url"],
+                                download_dir=playlist_dir,
+                                album=playlist_title,
+                                track=i + 1,
+                            )
+
+                            run_cmd_subprocess(cmd_playlist_video)
+                            write_to_archives(
+                                v, [playlist_archive_filepath, videos_archive_filepath]
+                            )
+
+                for v in channel_videos_info["entries"]:
+
+                    if already_in_archive(v, videos_archive_filepath):
                         print(
                             f"{v['id']} {v['title']!r} already in {playlist_archive_filename}"
                         )
                         continue
 
-                    cmd_playlist_video = get_video_cmd(
+                    cmd_channel_video = get_video_cmd(
                         v["url"],
-                        download_dir=playlist_dir,
-                        album=playlist_title,
-                        track=i + 1,
+                        download_dir=channel_dir,
+                        album="[Videos]" + channel_title,
                     )
+                    run_cmd_subprocess(cmd_channel_video)
+                    write_to_archives(v, [videos_archive_filepath])
+                print(f"**** DONE channel {channel_title!r} ****")
+            print("** DONE ALL **")
 
-                    run_cmd_subprocess(cmd_playlist_video)
-                    write_to_archives(
-                        v, [playlist_archive_filepath, videos_archive_filepath]
-                    )
-
-            channel_videos_info = json.loads(
-                run_cmd_subprocess(cmd_channel_videos_info, quiet=True)
-            )
-            for v in channel_videos_info["entries"]:
-
-                if already_in_archive(v, videos_archive_filepath):
-                    print(
-                        f"{v['id']} {v['title']!r} already in {playlist_archive_filename}"
-                    )
-                    continue
-
-                cmd_channel_video = get_video_cmd(
-                    v["url"],
-                    download_dir=channel_dir,
-                    album="[Videos]" + channel_title,
-                )
-                run_cmd_subprocess(cmd_channel_video)
-                write_to_archives(v, [videos_archive_filepath])
-            print(f"**** DONE channel {channel_title!r} ****")
-        print("** DONE ALL **")
-
-window.close()
+    window.close()
