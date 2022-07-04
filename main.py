@@ -6,6 +6,7 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
+from pdb import set_trace
 import re
 import sys
 
@@ -418,7 +419,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             playlists = channel["entries"]
             for pl_idx, (playlist_id, playlist) in enumerate(playlists.items()):
                 print(
-                    f"DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}",
+                    f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}",
                     end=" ",
                 )
                 archives_to_write = [channel_archive_filepath]
@@ -459,9 +460,12 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
                     print(
-                        f"DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}",
+                        f"  DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}",
                         end="",
                     )
+                    if video["title"] == "[Private video]":
+                        print(" - UNAVAILABLE; SKIPPING")
+                        continue
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
                     ydl.params["outtmpl"]["default"] = os.path.join(
@@ -475,8 +479,12 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         continue
                     print("", end="\n")
 
-                    ydl.download([video["url"]])
-                    write_to_archives(video, archives_to_write)
+                    retcode = ydl.download([video["url"]])
+                    if retcode == 0:
+                        write_to_archives(video, archives_to_write)
+                    else:
+                        print("DOWNLOAD FAILED", retcode)
+                        set_trace()
 
 
 def main():
