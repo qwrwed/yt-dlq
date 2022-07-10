@@ -405,6 +405,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         # "postprocessors": None,
         # "ffmpeg_location": None,
     }
+    failed_downloads = []
     with YoutubeDL(ydl_opts) as ydl:
         channels = all_urls_dict
         for ch_idx, (channel_id, channel) in enumerate(channels.items()):
@@ -483,8 +484,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     if retcode == 0:
                         write_to_archives(video, archives_to_write)
                     else:
-                        print("DOWNLOAD FAILED", retcode)
-                        set_trace()
+                        print("DOWNLOAD FAILED: ERROR CODE", retcode)
+                        failed_downloads.append(video)
+    if failed_downloads:
+        print(f"{len(failed_downloads)} failed downloads")
+        set_trace()
 
 
 def main():
