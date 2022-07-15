@@ -188,14 +188,29 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 # pprint(playlist_subgroup_children_urls)
                 if playlist_subgroup_url in playlist_subgroup_children_urls:
                     # we have a broken (infinite) youtube redirect
-                    print("ERROR: Youtube served us a broken URL.")
-                    print(
-                        f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_group_children_urls_titles[playlist_subgroup_url]!r}"
-                    )
-                    playlist_subgroup_url_fixed = input(
-                        "  Paste the resulting URL here: "
-                    )
+                    playlist_group_urls_fixed_path = Path(args.data_dir, "_json", "playlist_group_urls_fixed.json")
+                    playlist_group_urls_fixed_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        with open(playlist_group_urls_fixed_path, "r") as file:
+                            playlist_group_urls_fixed = json.load(file)
+                    except FileNotFoundError:
+                        playlist_group_urls_fixed = {}
+                    if playlist_subgroup_url in playlist_group_urls_fixed:
+                        playlist_subgroup_url_fixed = playlist_group_urls_fixed[playlist_subgroup_url]
+                    else:
+                        print("ERROR: Youtube served us a broken URL.")
+                        print(
+                            f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_group_children_urls_titles[playlist_subgroup_url]!r}"
+                        )
+                        playlist_subgroup_url_fixed = input(
+                            "  Paste the resulting URL here: "
+                        )
+                        playlist_group_urls_fixed[playlist_subgroup_url] = playlist_subgroup_url_fixed
+                        with open(playlist_group_urls_fixed_path, "w+") as file:
+                            json.dump(playlist_group_urls_fixed, file)
+
                     playlist_subgroup_urls.add(playlist_subgroup_url_fixed)
+
                 else:
                     playlist_urls |= playlist_subgroup_children_urls
         # print(playlist_urls, len(playlist_urls))
