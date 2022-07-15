@@ -9,19 +9,19 @@ from pathlib import Path
 from pdb import set_trace
 import re
 import sys
+from typing import Optional
 
 from yt_dlp import YoutubeDL
 
 from utils import (
     URL_TYPE_PATTERNS,
     already_in_archive,
-    escape_spaces,
     restrict_filename,
     write_to_archives,
 )
 
 
-class ProgramArgsNamespace(argparse.Namespace):
+class ProgramArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
     url: str
     batchfile: Path
     permit_single: bool
@@ -92,11 +92,11 @@ def get_url_type(url):
 
 
 def process_urls_input(urls_input: list[str]):
-    urls_processed_dict: dict[str, set[str]] = {
+    urls_processed_dict: dict[Optional[str], set] = {
         k: set() for k in URL_TYPE_PATTERNS.keys()
     } | {None: set()}
-    unknown_urls = set()
-    known_urls = set()
+    unknown_urls: set[str] = set()
+    known_urls: set[str] = set()
     for url in urls_input:
         if url in (known_urls | unknown_urls):
             continue
@@ -150,7 +150,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 playlist["url"]: playlist["title"]
                 for playlist in playlist_group_children_unresolved
             }
-            playlist_group_children_urls_list = (
+            playlist_group_children_urls_list = list(
                 playlist_group_children_urls_titles.keys()
             )
 
@@ -379,8 +379,8 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             f"python {sys.argv[0]} -j {str(json_output_filepath)!r}\n"
         )
         json_output_filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(json_output_filepath, "w+") as f:
-            json.dump(all_urls_dict, f, indent=4)
+        with open(json_output_filepath, "w+") as file:
+            json.dump(all_urls_dict, file, indent=4)
     return all_urls_dict
 
 
@@ -442,7 +442,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     playlist_archive_filename = restrict_filename(
                         f"playlist_{playlist['title']}.txt"
                     )
-                    playlist_archive_filepath = os.path.join(
+                    playlist_archive_filepath = Path(
                         playlist_dir, playlist_archive_filename
                     )
                     archives_to_write.append(playlist_archive_filepath)
