@@ -16,7 +16,9 @@ from yt_dlp import YoutubeDL
 from utils import (
     URL_TYPE_PATTERNS,
     already_in_archive,
+    read_entry_extended,
     restrict_filename,
+    write_entry_extended,
     write_to_archives,
 )
 
@@ -27,6 +29,7 @@ class ProgramArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-publi
     permit_single: bool
     json_file: Path
     data_dir: Path
+    playlist_duplicates: bool
 
 
 def process_args():
@@ -72,6 +75,14 @@ def process_args():
         help="Main folder to store downloaded videos and other info (default: %(default)s)",
         default="data",
         type=Path,
+    )
+    parser.add_argument(
+        "-g",
+        "--playlist-duplicates",
+        action="store_true",
+        help=(
+            "Allow videos to be downloaded multiple times if they are in multiple playlists. "
+        ),
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())
@@ -428,7 +439,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             channel_archive_filename = restrict_filename(
                 f"videos_{channel['title']}.txt"
             )
+            channel_archive_filename_json = restrict_filename(
+                f"videos_{channel['title']}.json"
+            )
             channel_archive_filepath = Path(channel_dir, channel_archive_filename)
+            channel_archive_filepath_json = Path(channel_dir, channel_archive_filename_json)
             print(
                 f"DOWNLOADING CHANNEL {ch_idx+1}/{len(channels)}: {channel['title']!r}"
             )
@@ -472,7 +487,12 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     playlist_dir = channel_dir
                     archive_filename = channel_archive_filename
                     archive_filepath = channel_archive_filepath
-
+                channel_playlist_info = {
+                    "channel_id": channel_id,
+                    "channel_title": channel["title"],
+                    "playlist_id": playlist_id,
+                    "playlist_title": playlist["title"]
+                }
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
                     print(
@@ -482,22 +502,37 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     if video["title"] == "[Private video]":
                         print(" - UNAVAILABLE; SKIPPING")
                         continue
+                    # if already_in_archive(video, archive_filepath):
+                    #     print(
+                    #         f" - ALREADY IN ARCHIVE {archive_filename}: {video['title']!r}"
+                    #     )
+                    #     continue
+                    video_archive_state = read_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
+                    if video_archive_state != -1:
+                        if video_archive_state == 0 and not args.playlist_duplicates:
+                            # write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
+                            print(
+                                f" - ALREADY IN ARCHIVE (CHANNEL) {channel_archive_filename_json}: {video['title']!r}"
+                            )
+                            continue
+                        elif video_archive_state == 1:
+                            print(
+                                f" - ALREADY IN ARCHIVE (PLAYLIST) {channel_archive_filename_json}: {video['title']!r}"
+                            )
+                            continue
+                    print("", end="\n")
+
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
                     ydl.params["outtmpl"]["default"] = os.path.join(
                         playlist_dir, "%(title)s[%(id)s].%(ext)s"
                     )
                     ydl.params["postprocessor_args"]["ffmpeg"] = ppa
-                    if already_in_archive(video, archive_filepath):
-                        print(
-                            f" - ALREADY IN ARCHIVE {archive_filename}: {video['title']!r}"
-                        )
-                        continue
-                    print("", end="\n")
 
                     retcode = ydl.download([video["url"]])
                     if retcode == 0:
-                        write_to_archives(video, archives_to_write)
+                        write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
+                        # write_to_archives(video, archives_to_write)
                     else:
                         print("DOWNLOAD FAILED: ERROR CODE", retcode)
                         failed_downloads.append(video)
