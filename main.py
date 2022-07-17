@@ -12,24 +12,34 @@ import sys
 from typing import Optional
 
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError
 
 from utils import (
     URL_TYPE_PATTERNS,
-    already_in_archive,
-    read_entry_extended,
+    DownloadStates,
+    get_download_state,
+    make_parent_dir,
+    # already_in_archive,
+    # read_entry_extended,
     restrict_filename,
-    write_entry_extended,
-    write_to_archives,
+    set_download_state,
+    # write_entry_extended,
+    # write_to_archives,
 )
 
+json_output_filepath = None
 
-class ProgramArgsNamespace(argparse.Namespace):  # pylint: disable=too-few-public-methods
+
+class ProgramArgsNamespace(
+    argparse.Namespace
+):  # pylint: disable=too-few-public-methods
     url: str
     batchfile: Path
     permit_single: bool
     json_file: Path
     data_dir: Path
     playlist_duplicates: bool
+    text_placeholders: bool
 
 
 def process_args():
@@ -59,6 +69,7 @@ def process_args():
         help="URL to download",
         nargs="?",
     )
+
     parser.add_argument(
         "-p",
         "--permit-single",
@@ -76,12 +87,21 @@ def process_args():
         default="data",
         type=Path,
     )
-    parser.add_argument(
+    duplicate_handler_group = parser.add_mutually_exclusive_group()
+    duplicate_handler_group.add_argument(
         "-g",
         "--playlist-duplicates",
         action="store_true",
         help=(
-            "Allow videos to be downloaded multiple times if they are in multiple playlists. "
+            "Allow videos to be downloaded multiple times if they are in multiple playlists."
+        ),
+    )
+    duplicate_handler_group.add_argument(
+        "-t",
+        "--text-placeholders",
+        action="store_true",
+        help=(
+            "Create text file placeholders instead of duplicating videos in multiple playlists"
         ),
     )
 
@@ -104,7 +124,7 @@ def get_url_type(url):
 
 def process_urls_input(urls_input: list[str]):
     urls_processed_dict: dict[Optional[str], set] = {
-        k: set() for k in URL_TYPE_PATTERNS.keys()
+        k: set() for k in URL_TYPE_PATTERNS
     } | {None: set()}
     unknown_urls: set[str] = set()
     known_urls: set[str] = set()
@@ -199,15 +219,19 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 # pprint(playlist_subgroup_children_urls)
                 if playlist_subgroup_url in playlist_subgroup_children_urls:
                     # we have a broken (infinite) youtube redirect
-                    playlist_group_urls_fixed_path = Path(args.data_dir, "_json", "playlist_group_urls_fixed.json")
-                    playlist_group_urls_fixed_path.parent.mkdir(parents=True, exist_ok=True)
+                    playlist_group_urls_fixed_path = Path(
+                        args.data_dir, "_json", "playlist_group_urls_fixed.json"
+                    )
+                    make_parent_dir(playlist_group_urls_fixed_path)
                     try:
                         with open(playlist_group_urls_fixed_path, "r") as file:
                             playlist_group_urls_fixed = json.load(file)
                     except FileNotFoundError:
                         playlist_group_urls_fixed = {}
                     if playlist_subgroup_url in playlist_group_urls_fixed:
-                        playlist_subgroup_url_fixed = playlist_group_urls_fixed[playlist_subgroup_url]
+                        playlist_subgroup_url_fixed = playlist_group_urls_fixed[
+                            playlist_subgroup_url
+                        ]
                     else:
                         print("ERROR: Youtube served us a broken URL.")
                         print(
@@ -216,7 +240,9 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                         playlist_subgroup_url_fixed = input(
                             "  Paste the resulting URL here: "
                         )
-                        playlist_group_urls_fixed[playlist_subgroup_url] = playlist_subgroup_url_fixed
+                        playlist_group_urls_fixed[
+                            playlist_subgroup_url
+                        ] = playlist_subgroup_url_fixed
                         with open(playlist_group_urls_fixed_path, "w+") as file:
                             json.dump(playlist_group_urls_fixed, file)
 
@@ -398,16 +424,31 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
         json_output_filename = restrict_filename(
             f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
         )
+        global json_output_filepath
         json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
         # pprint(all_urls_dict, sort_dicts=False)
-        print(
-            "\nAll URLs retrieved. To skip retrieval next time, run:\n"
-            f"python {sys.argv[0]} -j {str(json_output_filepath)!r}\n"
-        )
-        json_output_filepath.parent.mkdir(parents=True, exist_ok=True)
+
+        make_parent_dir(json_output_filepath)
         with open(json_output_filepath, "w+") as file:
             json.dump(all_urls_dict, file, indent=4)
     return all_urls_dict
+
+
+def show_retrieved_urls_filepath(args):
+    if not json_output_filepath:
+        return
+    print(
+        "\nTo skip URL retrieval next time, run:\n"
+        f"python {sys.argv[0]} -j {str(json_output_filepath)!r} -d {args.data_dir}\n"
+    )
+
+
+def match_filter_func(info_dict, *, incomplete):
+    if info_dict.get("is_live") is True or info_dict.get("was_live") is True:
+        return "Video is/was livestream; skipping"
+    # if info_dict.get("availability") != 'public':
+    #     return "Video is private; skipping"
+    return None
 
 
 def download_all(args: ProgramArgsNamespace, all_urls_dict):
@@ -427,9 +468,10 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         "postprocessor_args": {"ffmpeg": []},
         "restrictfilenames": True,
         "windowsfilenames": True,
-        "ignoreerrors": "only_download",
+        # "ignoreerrors": "only_download",
         # "postprocessors": None,
         # "ffmpeg_location": None,
+        "match_filter": match_filter_func,
     }
     failed_downloads = []
     with YoutubeDL(ydl_opts) as ydl:
@@ -443,7 +485,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                 f"videos_{channel['title']}.json"
             )
             channel_archive_filepath = Path(channel_dir, channel_archive_filename)
-            channel_archive_filepath_json = Path(channel_dir, channel_archive_filename_json)
+            channel_archive_filepath_json = Path(
+                channel_dir, channel_archive_filename_json
+            )
             print(
                 f"DOWNLOADING CHANNEL {ch_idx+1}/{len(channels)}: {channel['title']!r}"
             )
@@ -476,8 +520,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         playlist_dir, playlist_archive_filename
                     )
                     archives_to_write.append(playlist_archive_filepath)
-                    archive_filename = playlist_archive_filename
-                    archive_filepath = playlist_archive_filepath
+                    # archive_filename = playlist_archive_filename
+                    # archive_filepath = playlist_archive_filepath
                 else:
                     print(f"[loose videos] {channel['title']!r}")
                     ppa += [
@@ -485,16 +529,20 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         f"album=[Videos]{channel['title']}",
                     ]
                     playlist_dir = channel_dir
-                    archive_filename = channel_archive_filename
-                    archive_filepath = channel_archive_filepath
+                    # archive_filename = channel_archive_filename
+                    # archive_filepath = channel_archive_filepath
                 channel_playlist_info = {
                     "channel_id": channel_id,
                     "channel_title": channel["title"],
                     "playlist_id": playlist_id,
-                    "playlist_title": playlist["title"]
+                    "playlist_title": playlist["title"],
                 }
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
+                    placeholder_path = Path(
+                        playlist_dir,
+                        f"{restrict_filename(video['title'])}[{video_id}].txt",
+                    )
                     print(
                         f"  DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}",
                         end="",
@@ -502,51 +550,112 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     if video["title"] == "[Private video]":
                         print(" - UNAVAILABLE; SKIPPING")
                         continue
-                    # if already_in_archive(video, archive_filepath):
-                    #     print(
-                    #         f" - ALREADY IN ARCHIVE {archive_filename}: {video['title']!r}"
-                    #     )
-                    #     continue
-                    video_archive_state = read_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
-                    if video_archive_state != -1:
-                        if video_archive_state == 0 and not args.playlist_duplicates:
-                            # write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
-                            print(
-                                f" - ALREADY IN ARCHIVE (CHANNEL) {channel_archive_filename_json}: {video['title']!r}"
-                            )
+
+                    video_download_state = get_download_state(
+                        video, channel_playlist_info, channel_archive_filepath_json
+                    )
+                    remove_placeholder = False
+                    match video_download_state:
+                        case DownloadStates.NEVER_DOWNLOADED:
+                            is_duplicate = False
+                        case DownloadStates.ORIGINAL_DOWNLOADED:
+                            print(" - ALREADY DOWNLOADED IN PLAYLIST")
                             continue
-                        elif video_archive_state == 1:
-                            print(
-                                f" - ALREADY IN ARCHIVE (PLAYLIST) {channel_archive_filename_json}: {video['title']!r}"
-                            )
+                        case DownloadStates.DUPLICATE_DOWNLOADED:
+                            print(" - ALREADY DOWNLOADED IN PLAYLIST")
                             continue
-                    print("", end="\n")
+                        case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
+                            print(" - DOWNLOADED IN ANOTHER PLAYLIST", end="")
+                            if args.playlist_duplicates:
+                                is_duplicate = True
+                                print(" (DUPLICATES ENABLED)")
+                            elif args.text_placeholders:
+                                print(" - CREATING PLACEHOLDER")
+                                make_parent_dir(placeholder_path)
+                                open(placeholder_path, "w+").close()
+                                set_download_state(
+                                    video,
+                                    channel_playlist_info,
+                                    channel_archive_filepath_json,
+                                    DownloadStates.CREATED_PLACEHOLDER,
+                                )
+                                continue
+                            else:
+                                print(" - SKIPPING")
+                                continue
+                        case DownloadStates.CREATED_PLACEHOLDER:
+                            if args.playlist_duplicates:
+                                print(" - OVERWRITING PLACEHOLDER")
+                                remove_placeholder = True
+                                is_duplicate = True
+                            else:
+                                print(" - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
+                                continue
+                        case _:
+                            input(repr(video_download_state))
 
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
+                    ydl.params["postprocessor_args"]["ffmpeg"] = ppa
+
                     ydl.params["outtmpl"]["default"] = os.path.join(
                         playlist_dir, "%(title)s[%(id)s].%(ext)s"
                     )
-                    ydl.params["postprocessor_args"]["ffmpeg"] = ppa
+                    try:
+                        ydl.download([video["url"]])
+                    except DownloadError as exc:
+                        if (
+                            "Join this channel to get access to members-only content like this video, and other exclusive perks."
+                            in exc.msg
+                        ):
+                            continue
+                        raise
+                    # try:
+                    #     retcode =
+                    # except DownloadError as exc:
+                    #     # print("****************************")
+                    #     # print(exc)
+                    #     # set_trace()
+                    #     raise
+                    #     # if "blocked" in exc.msg:
+                    #     #     # print(f"DOWNLOAD FAILED: {exc.msg}", )
+                    #     #     failed_downloads.append(video)
+                    #     # else:
+                    #     #     set_trace()
+                    #     #     raise
+                    # if retcode == 1:
+                    #     set_trace()
+                    if remove_placeholder:
+                        os.remove(placeholder_path)
 
-                    retcode = ydl.download([video["url"]])
-                    if retcode == 0:
-                        write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
-                        # write_to_archives(video, archives_to_write)
-                    else:
-                        print("DOWNLOAD FAILED: ERROR CODE", retcode)
-                        failed_downloads.append(video)
+                    # write_to_archives(video, archives_to_write)
+                    # write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
+                    set_download_state(
+                        video,
+                        channel_playlist_info,
+                        channel_archive_filepath_json,
+                        (
+                            DownloadStates.DUPLICATE_DOWNLOADED
+                            if is_duplicate
+                            else DownloadStates.ORIGINAL_DOWNLOADED
+                        ),
+                    )
     if failed_downloads:
         print(f"{len(failed_downloads)} failed downloads")
         set_trace()
 
 
-def main():
-    args = process_args()
+def main(args):
     all_urls_dict = get_all_urls_dict(args)
     download_all(args, all_urls_dict)
     # pprint(all_urls_dict, sort_dicts=False)
 
 
 if __name__ == "__main__":
-    main()
+    args_main = process_args()
+    try:
+        main(args_main)
+        show_retrieved_urls_filepath(args_main)
+    except Exception as e:
+        show_retrieved_urls_filepath(args_main)
+        raise
