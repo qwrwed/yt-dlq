@@ -1,6 +1,7 @@
 # from pdb import set_trace
 # from pprint import pprint
 
+import atexit
 import argparse
 from datetime import datetime
 import json
@@ -13,6 +14,7 @@ from typing import Optional
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
+from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessorError
 
 from utils import (
     URL_TYPE_PATTERNS,
@@ -40,6 +42,7 @@ class ProgramArgsNamespace(
     data_dir: Path
     playlist_duplicates: bool
     text_placeholders: bool
+    ffmpeg_location: Path
 
 
 def process_args():
@@ -59,7 +62,7 @@ def process_args():
         metavar="FILE",
         help=(
             "File containing URLs to download, one URL per line. "
-            'Lines starting with "#", ";" or "]" are considered as comments and ignored'
+            'Lines starting with "#" are considered as comments and ignored'
         ),
         type=Path,
     )
@@ -86,6 +89,11 @@ def process_args():
         help="Main folder to store downloaded videos and other info (default: %(default)s)",
         default="data",
         type=Path,
+    )
+    parser.add_argument(
+        '--ffmpeg-location', metavar='PATH',
+        dest='ffmpeg_location',
+        help='Location of the ffmpeg binary; either the path to the binary or its containing directory'
     )
     duplicate_handler_group = parser.add_mutually_exclusive_group()
     duplicate_handler_group.add_argument(
@@ -143,16 +151,18 @@ def process_urls_input(urls_input: list[str]):
 
 
 def get_urls_input(args: ProgramArgsNamespace):
-    comment_chars = {"#", ";", "]"}
+    comment_char = "#"
     if args.batchfile:
         with open(args.batchfile) as file:
-            urls_input = [
-                line
-                for rawline in file.readlines()
-                if (line := rawline.strip()) and not line[0] in comment_chars
-            ]
+            urls_input = []
+            for rawline in file.readlines():
+                line = rawline.strip()
+                if line and line[0] != comment_char:
+                    urls_input.append(line.split(comment_char)[0].strip())
     else:
         urls_input = [args.url]
+    print(urls_input)
+    exit
     return process_urls_input(urls_input)
 
 
@@ -472,6 +482,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         # "postprocessors": None,
         # "ffmpeg_location": None,
         "match_filter": match_filter_func,
+        "ffmpeg_location": args.ffmpeg_location,
     }
     failed_downloads = []
     with YoutubeDL(ydl_opts) as ydl:
@@ -609,6 +620,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             in exc.msg
                         ):
                             continue
+                        elif ("ffmpeg not found" in exc.msg):
+                            print("  Install by running 'python download_ffmpeg.py'")
+                            exit()
                         raise
                     # try:
                     #     retcode =
@@ -644,6 +658,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         print(f"{len(failed_downloads)} failed downloads")
         set_trace()
 
+def exit_handler():
+    show_retrieved_urls_filepath(args_main)
+
 
 def main(args):
     all_urls_dict = get_all_urls_dict(args)
@@ -653,9 +670,5 @@ def main(args):
 
 if __name__ == "__main__":
     args_main = process_args()
-    try:
-        main(args_main)
-        show_retrieved_urls_filepath(args_main)
-    except Exception as e:
-        show_retrieved_urls_filepath(args_main)
-        raise
+    atexit.register(exit_handler)
+    main(args_main)

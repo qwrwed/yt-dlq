@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from pprint import pprint
 import shutil
+import zipfile
 
 import PySimpleGUI as sg
 import requests
@@ -50,6 +51,17 @@ def download(url, filepath, verbose=True):
 
     return path
 
+def filename_from_url(url):
+    return url.split("/")[-1]
+
+def unzip(filename):
+    with zipfile.ZipFile(filename, "r") as zip_ref:
+        zip_ref.extractall()
+
+def download_ytdl():
+    ytdl_url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+    ytdl_filename = filename_from_url(ytdl_url)
+    download(ytdl_url, ytdl_filename)
 
 def input_popup(msg, default_input="", window_title="Input Required", beep=True):
     """
