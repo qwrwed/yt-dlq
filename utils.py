@@ -82,7 +82,7 @@ def input_popup(msg, default_input="", window_title="Input Required", beep=True)
 
 PATTERN_ID = r"[\w\-]+"
 PATTERN_QUERY = r"(?:\?[\w=\&]+)"
-PATTERN_CHANNEL_BASE = rf"https:\/\/(?:www\.)?youtube\.com\/(?:c|channel)\/{PATTERN_ID}"
+PATTERN_CHANNEL_BASE = rf"https:\/\/(?:www\.)?youtube\.com\/(?:c|channel|user)\/{PATTERN_ID}"
 URL_TYPE_PATTERNS = {
     "channel_home": rf"^({PATTERN_CHANNEL_BASE})(?:\/featured)?\/?$",
     "channel_group_playlists": rf"^({PATTERN_CHANNEL_BASE}(?:\/playlists){PATTERN_QUERY}?)\/?$",
