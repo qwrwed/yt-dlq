@@ -43,6 +43,7 @@ class ProgramArgsNamespace(
     playlist_duplicates: bool
     text_placeholders: bool
     ffmpeg_location: Path
+    use_archives: bool
 
 
 def process_args():
@@ -92,7 +93,6 @@ def process_args():
     )
     parser.add_argument(
         '--ffmpeg-location', metavar='PATH',
-        dest='ffmpeg_location',
         help='Location of the ffmpeg binary; either the path to the binary or its containing directory'
     )
     duplicate_handler_group = parser.add_mutually_exclusive_group()
@@ -110,6 +110,15 @@ def process_args():
         action="store_true",
         help=(
             "Create text file placeholders instead of duplicating videos in multiple playlists"
+        ),
+    )
+    duplicate_handler_group.add_argument(
+        "-n",
+        "--no-archives",
+        action="store_false",
+        dest="use_archives",
+        help=(
+            "Don't read or write any archive files (apart from those passed as arguments to the program)"
         ),
     )
 
@@ -161,8 +170,6 @@ def get_urls_input(args: ProgramArgsNamespace):
                     urls_input.append(line.split(comment_char)[0].strip())
     else:
         urls_input = [args.url]
-    print(urls_input)
-    exit
     return process_urls_input(urls_input)
 
 
@@ -431,16 +438,16 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
 
         # pprint(urls_input, sort_dicts=False)
         all_urls_dict = construct_all_urls_dict(urls_input, args)
-        json_output_filename = restrict_filename(
-            f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
-        )
-        global json_output_filepath
-        json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
-        # pprint(all_urls_dict, sort_dicts=False)
-
-        make_parent_dir(json_output_filepath)
-        with open(json_output_filepath, "w+") as file:
-            json.dump(all_urls_dict, file, indent=4)
+        if args.use_archives:
+            json_output_filename = restrict_filename(
+                f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
+            )
+            global json_output_filepath
+            json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
+            # pprint(all_urls_dict, sort_dicts=False)
+            make_parent_dir(json_output_filepath)
+            with open(json_output_filepath, "w+") as file:
+                json.dump(all_urls_dict, file, indent=4)
     return all_urls_dict
 
 
@@ -561,49 +568,53 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     if video["title"] == "[Private video]":
                         print(" - UNAVAILABLE; SKIPPING")
                         continue
-
-                    video_download_state = get_download_state(
-                        video, channel_playlist_info, channel_archive_filepath_json
-                    )
                     remove_placeholder = False
-                    match video_download_state:
-                        case DownloadStates.NEVER_DOWNLOADED:
-                            is_duplicate = False
-                        case DownloadStates.ORIGINAL_DOWNLOADED:
-                            print(" - ALREADY DOWNLOADED IN PLAYLIST")
-                            continue
-                        case DownloadStates.DUPLICATE_DOWNLOADED:
-                            print(" - ALREADY DOWNLOADED IN PLAYLIST")
-                            continue
-                        case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
-                            print(" - DOWNLOADED IN ANOTHER PLAYLIST", end="")
-                            if args.playlist_duplicates:
-                                is_duplicate = True
-                                print(" (DUPLICATES ENABLED)")
-                            elif args.text_placeholders:
-                                print(" - CREATING PLACEHOLDER")
-                                make_parent_dir(placeholder_path)
-                                open(placeholder_path, "w+").close()
-                                set_download_state(
-                                    video,
-                                    channel_playlist_info,
-                                    channel_archive_filepath_json,
-                                    DownloadStates.CREATED_PLACEHOLDER,
-                                )
+                    if args.use_archives:
+                        video_download_state = get_download_state(
+                            video, channel_playlist_info, channel_archive_filepath_json
+                        )
+                        match video_download_state:
+                            case DownloadStates.NEVER_DOWNLOADED:
+                                is_duplicate = False
+                            case DownloadStates.ORIGINAL_DOWNLOADED:
+                                print(" - ALREADY DOWNLOADED IN PLAYLIST")
                                 continue
-                            else:
-                                print(" - SKIPPING")
+                            case DownloadStates.DUPLICATE_DOWNLOADED:
+                                print(" - ALREADY DOWNLOADED IN PLAYLIST")
                                 continue
-                        case DownloadStates.CREATED_PLACEHOLDER:
-                            if args.playlist_duplicates:
-                                print(" - OVERWRITING PLACEHOLDER")
-                                remove_placeholder = True
-                                is_duplicate = True
-                            else:
-                                print(" - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
-                                continue
-                        case _:
-                            input(repr(video_download_state))
+                            case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
+                                print(" - DOWNLOADED IN ANOTHER PLAYLIST", end="")
+                                if args.playlist_duplicates:
+                                    is_duplicate = True
+                                    print(" (DUPLICATES ENABLED)")
+                                elif args.text_placeholders:
+                                    print(" - CREATING PLACEHOLDER")
+                                    make_parent_dir(placeholder_path)
+                                    open(placeholder_path, "w+").close()
+                                    set_download_state(
+                                        video,
+                                        channel_playlist_info,
+                                        channel_archive_filepath_json,
+                                        DownloadStates.CREATED_PLACEHOLDER,
+                                    )
+                                    continue
+                                else:
+                                    print(" - SKIPPING")
+                                    continue
+                            case DownloadStates.CREATED_PLACEHOLDER:
+                                if args.playlist_duplicates:
+                                    print(" - OVERWRITING PLACEHOLDER")
+                                    remove_placeholder = True
+                                    is_duplicate = True
+                                else:
+                                    print(" - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
+                                    continue
+                            case _:
+                                print("Unhandled download state", repr(video_download_state))
+                                input()
+                    else:
+                        video_download_state = DownloadStates.NEVER_DOWNLOADED
+
 
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
@@ -644,16 +655,17 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
 
                     # write_to_archives(video, archives_to_write)
                     # write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
-                    set_download_state(
-                        video,
-                        channel_playlist_info,
-                        channel_archive_filepath_json,
-                        (
-                            DownloadStates.DUPLICATE_DOWNLOADED
-                            if is_duplicate
-                            else DownloadStates.ORIGINAL_DOWNLOADED
-                        ),
-                    )
+                    if args.use_archives:
+                        set_download_state(
+                            video,
+                            channel_playlist_info,
+                            channel_archive_filepath_json,
+                            (
+                                DownloadStates.DUPLICATE_DOWNLOADED
+                                if is_duplicate
+                                else DownloadStates.ORIGINAL_DOWNLOADED
+                            ),
+                        )
     if failed_downloads:
         print(f"{len(failed_downloads)} failed downloads")
         set_trace()
