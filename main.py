@@ -670,17 +670,14 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         print(f"{len(failed_downloads)} failed downloads")
         set_trace()
 
-def exit_handler():
-    show_retrieved_urls_filepath(args_main)
 
 
-def main(args):
+def main():
+    args = process_args()
+    atexit.register(lambda: show_retrieved_urls_filepath(args))
     all_urls_dict = get_all_urls_dict(args)
     download_all(args, all_urls_dict)
-    # pprint(all_urls_dict, sort_dicts=False)
 
 
 if __name__ == "__main__":
-    args_main = process_args()
-    atexit.register(exit_handler)
-    main(args_main)
+    main()
