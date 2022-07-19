@@ -14,7 +14,6 @@ from typing import Optional
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
-from yt_dlp.postprocessor.ffmpeg import FFmpegPostProcessorError
 
 from utils import (
     URL_TYPE_PATTERNS,
@@ -44,6 +43,7 @@ class ProgramArgsNamespace(
     text_placeholders: bool
     ffmpeg_location: Path
     use_archives: bool
+    no_channels: bool
 
 
 def process_args():
@@ -92,12 +92,13 @@ def process_args():
         type=Path,
     )
     parser.add_argument(
-        '--ffmpeg-location', metavar='PATH',
-        help='Location of the ffmpeg binary; either the path to the binary or its containing directory'
+        "--ffmpeg-location",
+        metavar="PATH",
+        help="Location of the ffmpeg binary; either the path to the binary or its containing directory",
     )
     duplicate_handler_group = parser.add_mutually_exclusive_group()
     duplicate_handler_group.add_argument(
-        "-g",
+        "-b",
         "--playlist-duplicates",
         action="store_true",
         help=(
@@ -120,6 +121,12 @@ def process_args():
         help=(
             "Don't read or write any archive files (apart from those passed as arguments to the program)"
         ),
+    )
+    parser.add_argument(
+        "-g",
+        "--no-channels",
+        action="store_true",
+        help="Don't split downloads into folder by channel",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())
@@ -174,7 +181,6 @@ def get_urls_input(args: ProgramArgsNamespace):
 
 
 def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
-    playlist_urls = set(urls_input["playlist"])
     all_urls_dict = {}
     channel_dict = {}
     seen_video_ids = set()
@@ -184,89 +190,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
             "quiet": True,
         }
     ) as ydl:
-        playlist_group_urls = sorted(list(urls_input["channel_group_playlists"]))
-        for (i, playlist_group_url) in enumerate(playlist_group_urls):
-            # playlist group or subgroup, e.g.
-            #   https://www.youtube.com/c/daftpunk/playlists
-            #   https://www.youtube.com/c/daftpunk/playlists?view=71&sort=dd&shelf_id=0
-            print(
-                f"RETRIEVING INFO: group {i+1}/{len(playlist_group_urls)} {playlist_group_url!r}"
-            )
-            playlist_group_info = ydl.extract_info(playlist_group_url, download=False)
-            playlist_group_children_unresolved = playlist_group_info["entries"]
-            playlist_group_children_urls_titles = {
-                playlist["url"]: playlist["title"]
-                for playlist in playlist_group_children_unresolved
-            }
-            playlist_group_children_urls_list = list(
-                playlist_group_children_urls_titles.keys()
-            )
-
-            # sort group children urls into playlist subgroups and playlists
-            playlist_group_children_urls_types = {
-                k: v
-                for k, v in process_urls_input(
-                    playlist_group_children_urls_list
-                ).items()
-                if k and "playlist" in k
-            }
-            # pprint(playlist_group_children_urls_types)
-
-            playlist_urls |= playlist_group_children_urls_types["playlist"]
-            playlist_subgroup_urls = playlist_group_children_urls_types[
-                "channel_group_playlists"
-            ]
-            # pprint(playlist_subgroup_urls)
-
-            while len(playlist_subgroup_urls) > 0:
-                playlist_subgroup_url = playlist_subgroup_urls.pop()
-                print(
-                    f"RETRIEVING INFO:  playlist subgroup ({len(playlist_subgroup_urls)+1} left) {playlist_subgroup_url!r}"
-                )
-                playlist_subgroup_info = ydl.extract_info(
-                    playlist_subgroup_url, download=False
-                )
-                # pprint(playlist_subgroup_info)
-                playlist_subgroup_children = playlist_subgroup_info["entries"]
-                # pprint(playlist_subgroup_url)
-                # pprint(playlist_subgroup_children)
-                playlist_subgroup_children_urls = {
-                    child["url"] for child in playlist_subgroup_children
-                }
-                # pprint(playlist_subgroup_children_urls)
-                if playlist_subgroup_url in playlist_subgroup_children_urls:
-                    # we have a broken (infinite) youtube redirect
-                    playlist_group_urls_fixed_path = Path(
-                        args.data_dir, "_json", "playlist_group_urls_fixed.json"
-                    )
-                    make_parent_dir(playlist_group_urls_fixed_path)
-                    try:
-                        with open(playlist_group_urls_fixed_path, "r") as file:
-                            playlist_group_urls_fixed = json.load(file)
-                    except FileNotFoundError:
-                        playlist_group_urls_fixed = {}
-                    if playlist_subgroup_url in playlist_group_urls_fixed:
-                        playlist_subgroup_url_fixed = playlist_group_urls_fixed[
-                            playlist_subgroup_url
-                        ]
-                    else:
-                        print("ERROR: Youtube served us a broken URL.")
-                        print(
-                            f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_group_children_urls_titles[playlist_subgroup_url]!r}"
-                        )
-                        playlist_subgroup_url_fixed = input(
-                            "  Paste the resulting URL here: "
-                        )
-                        playlist_group_urls_fixed[
-                            playlist_subgroup_url
-                        ] = playlist_subgroup_url_fixed
-                        with open(playlist_group_urls_fixed_path, "w+") as file:
-                            json.dump(playlist_group_urls_fixed, file)
-
-                    playlist_subgroup_urls.add(playlist_subgroup_url_fixed)
-
-                else:
-                    playlist_urls |= playlist_subgroup_children_urls
+        playlist_urls = resolve_playlist_groups(ydl, urls_input, args)
         # print(playlist_urls, len(playlist_urls))
         for i, playlist_url in enumerate(playlist_urls):
             print(
@@ -279,14 +203,22 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 continue
             # playlist_entries_urls = [child["url"] for child in playlist_entries]
             pl_channel_id = (
-                playlist_info["channel_id"] or playlist_entries[0]["channel_id"]
+                (playlist_info["channel_id"] or playlist_entries[0]["channel_id"])
+                if not args.no_channels
+                else ""
             )
             pl_channel_title = (
-                playlist_info["channel"] or playlist_entries[0]["uploader"]
+                (playlist_info["channel"] or playlist_entries[0]["uploader"])
+                if not args.no_channels
+                else ""
             )
             pl_channel_url = (
-                playlist_info["channel_url"]
-                or f"https://www.youtube.com/channel/{pl_channel_id}"
+                (
+                    playlist_info["channel_url"]
+                    or f"https://www.youtube.com/channel/{pl_channel_id}"
+                )
+                if not args.no_channels
+                else ""
             )
             pl_title = playlist_info["title"]
             pl_id = playlist_info["id"]
@@ -326,9 +258,9 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
             )
             channel_videos_info = ydl.extract_info(channel_videos_url, download=False)
             # pprint(channel_videos_info)
-            ch_id = channel_videos_info["channel_id"]
-            ch_title = channel_videos_info["channel"]
-            ch_url = channel_videos_info["channel_url"]
+            ch_id = channel_videos_info["channel_id"] if not args.no_channels else ""
+            ch_title = channel_videos_info["channel"] if not args.no_channels else ""
+            ch_url = channel_videos_info["channel_url"] if not args.no_channels else ""
 
             pl_id = ""
             pl_title = ""
@@ -374,9 +306,9 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 f"RETRIEVING INFO: video {i+1}/{len(urls_input['video'])} {video_url!r}"
             )
             video_info = ydl.extract_info(video_url, download=False)
-            ch_id = video_info["channel_id"]
-            ch_title = video_info["channel"]
-            ch_url = video_info["channel_url"]
+            ch_id = video_info["channel_id"] if not args.no_channels else ""
+            ch_title = video_info["channel"] if not args.no_channels else ""
+            ch_url = video_info["channel_url"] if not args.no_channels else ""
 
             pl_id = ""
             pl_title = ""
@@ -422,6 +354,92 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
     return all_urls_dict
 
 
+def resolve_playlist_groups(ydl, urls_input, args):
+    playlist_urls = set(urls_input["playlist"])
+    playlist_group_urls = sorted(list(urls_input["channel_group_playlists"]))
+    for (i, playlist_group_url) in enumerate(playlist_group_urls):
+        # playlist group or subgroup, e.g.
+        #   https://www.youtube.com/c/daftpunk/playlists
+        #   https://www.youtube.com/c/daftpunk/playlists?view=71&sort=dd&shelf_id=0
+        print(
+            f"RETRIEVING INFO: group {i+1}/{len(playlist_group_urls)} {playlist_group_url!r}"
+        )
+        playlist_group_info = ydl.extract_info(playlist_group_url, download=False)
+        playlist_group_children_unresolved = playlist_group_info["entries"]
+        playlist_group_children_urls_titles = {
+            playlist["url"]: playlist["title"]
+            for playlist in playlist_group_children_unresolved
+        }
+        playlist_group_children_urls_list = list(
+            playlist_group_children_urls_titles.keys()
+        )
+
+        # sort group children urls into playlist subgroups and playlists
+        playlist_group_children_urls_types = {
+            k: v
+            for k, v in process_urls_input(playlist_group_children_urls_list).items()
+            if k and "playlist" in k
+        }
+        # pprint(playlist_group_children_urls_types)
+
+        playlist_urls |= playlist_group_children_urls_types["playlist"]
+        playlist_subgroup_urls = playlist_group_children_urls_types[
+            "channel_group_playlists"
+        ]
+        # pprint(playlist_subgroup_urls)
+
+        while len(playlist_subgroup_urls) > 0:
+            playlist_subgroup_url = playlist_subgroup_urls.pop()
+            print(
+                f"RETRIEVING INFO:  playlist subgroup ({len(playlist_subgroup_urls)+1} left) {playlist_subgroup_url!r}"
+            )
+            playlist_subgroup_info = ydl.extract_info(
+                playlist_subgroup_url, download=False
+            )
+            # pprint(playlist_subgroup_info)
+            playlist_subgroup_children = playlist_subgroup_info["entries"]
+            # pprint(playlist_subgroup_url)
+            # pprint(playlist_subgroup_children)
+            playlist_subgroup_children_urls = {
+                child["url"] for child in playlist_subgroup_children
+            }
+            # pprint(playlist_subgroup_children_urls)
+            if playlist_subgroup_url in playlist_subgroup_children_urls:
+                # we have a broken (infinite) youtube redirect
+                playlist_group_urls_fixed_path = Path(
+                    args.data_dir, "_json", "playlist_group_urls_fixed.json"
+                )
+                make_parent_dir(playlist_group_urls_fixed_path)
+                try:
+                    with open(playlist_group_urls_fixed_path, "r") as file:
+                        playlist_group_urls_fixed = json.load(file)
+                except FileNotFoundError:
+                    playlist_group_urls_fixed = {}
+                if playlist_subgroup_url in playlist_group_urls_fixed:
+                    playlist_subgroup_url_fixed = playlist_group_urls_fixed[
+                        playlist_subgroup_url
+                    ]
+                else:
+                    print("ERROR: Youtube served us a broken URL.")
+                    print(
+                        f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_group_children_urls_titles[playlist_subgroup_url]!r}"
+                    )
+                    playlist_subgroup_url_fixed = input(
+                        "  Paste the resulting URL here: "
+                    )
+                    playlist_group_urls_fixed[
+                        playlist_subgroup_url
+                    ] = playlist_subgroup_url_fixed
+                    with open(playlist_group_urls_fixed_path, "w+") as file:
+                        json.dump(playlist_group_urls_fixed, file)
+
+                playlist_subgroup_urls.add(playlist_subgroup_url_fixed)
+
+            else:
+                playlist_urls |= playlist_subgroup_children_urls
+    return playlist_urls
+
+
 def get_all_urls_dict(args: ProgramArgsNamespace):
     if args.json_file:
         with open(args.json_file, "r") as file:
@@ -436,7 +454,6 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
         del urls_input["channel_home"]
         del urls_input[None]
 
-        # pprint(urls_input, sort_dicts=False)
         all_urls_dict = construct_all_urls_dict(urls_input, args)
         if args.use_archives:
             json_output_filename = restrict_filename(
@@ -444,7 +461,6 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             )
             global json_output_filepath
             json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
-            # pprint(all_urls_dict, sort_dicts=False)
             make_parent_dir(json_output_filepath)
             with open(json_output_filepath, "w+") as file:
                 json.dump(all_urls_dict, file, indent=4)
@@ -460,7 +476,7 @@ def show_retrieved_urls_filepath(args):
     )
 
 
-def match_filter_func(info_dict, *, incomplete):
+def match_filter_func(info_dict):
     if info_dict.get("is_live") is True or info_dict.get("was_live") is True:
         return "Video is/was livestream; skipping"
     # if info_dict.get("availability") != 'public':
@@ -496,12 +512,16 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         channels = all_urls_dict
         for ch_idx, (channel_id, channel) in enumerate(channels.items()):
             channel_dir = Path(args.data_dir, restrict_filename(channel["title"]))
-            channel_archive_filename = restrict_filename(
-                f"videos_{channel['title']}.txt"
-            )
-            channel_archive_filename_json = restrict_filename(
-                f"videos_{channel['title']}.json"
-            )
+            if channel_id:
+                channel_archive_filename = restrict_filename(
+                    f"videos_{channel['title']}.txt"
+                )
+                channel_archive_filename_json = restrict_filename(
+                    f"videos_{channel['title']}.json"
+                )
+            else:
+                channel_archive_filename = "videos.txt"
+                channel_archive_filename_json = "videos.json"
             channel_archive_filepath = Path(channel_dir, channel_archive_filename)
             channel_archive_filepath_json = Path(
                 channel_dir, channel_archive_filename_json
@@ -607,14 +627,18 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                     remove_placeholder = True
                                     is_duplicate = True
                                 else:
-                                    print(" - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
+                                    print(
+                                        " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING"
+                                    )
                                     continue
                             case _:
-                                print("Unhandled download state", repr(video_download_state))
+                                print(
+                                    "Unhandled download state",
+                                    repr(video_download_state),
+                                )
                                 input()
                     else:
                         video_download_state = DownloadStates.NEVER_DOWNLOADED
-
 
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
@@ -631,7 +655,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             in exc.msg
                         ):
                             continue
-                        elif ("ffmpeg not found" in exc.msg):
+                        elif "ffmpeg not found" in exc.msg:
                             print("  Install by running 'python download_ffmpeg.py'")
                             exit()
                         raise
@@ -669,7 +693,6 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
     if failed_downloads:
         print(f"{len(failed_downloads)} failed downloads")
         set_trace()
-
 
 
 def main():
