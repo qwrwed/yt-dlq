@@ -28,8 +28,6 @@ from utils import (
     # write_to_archives,
 )
 
-json_output_filepath = None
-
 
 class ProgramArgsNamespace(
     argparse.Namespace
@@ -459,15 +457,15 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             json_output_filename = restrict_filename(
                 f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
             )
-            global json_output_filepath
             json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
+            atexit.register(lambda: show_retrieved_urls_filepath(json_output_filepath, args))
             make_parent_dir(json_output_filepath)
             with open(json_output_filepath, "w+") as file:
                 json.dump(all_urls_dict, file, indent=4)
     return all_urls_dict
 
 
-def show_retrieved_urls_filepath(args):
+def show_retrieved_urls_filepath(json_output_filepath, args):
     if not json_output_filepath:
         return
     print(
@@ -697,7 +695,6 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
 
 def main():
     args = process_args()
-    atexit.register(lambda: show_retrieved_urls_filepath(args))
     all_urls_dict = get_all_urls_dict(args)
     download_all(args, all_urls_dict)
 
