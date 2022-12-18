@@ -206,7 +206,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 else ""
             )
             pl_channel_title = (
-                (playlist_info["channel"] or playlist_entries[0]["uploader"])
+                (playlist_info["channel"] or playlist_entries[0]["channel"])
                 if not args.no_channels
                 else ""
             )
@@ -458,7 +458,9 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
                 f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
             )
             json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
-            atexit.register(lambda: show_retrieved_urls_filepath(json_output_filepath, args))
+            atexit.register(
+                lambda: show_retrieved_urls_filepath(json_output_filepath, args)
+            )
             make_parent_dir(json_output_filepath)
             with open(json_output_filepath, "w+") as file:
                 json.dump(all_urls_dict, file, indent=4)
@@ -651,6 +653,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         if (
                             "Join this channel to get access to members-only content like this video, and other exclusive perks."
                             in exc.msg
+                        ):
+                            continue
+                        elif re.search(
+                            "Video unavailable. This video contains content from .*, who has blocked it in your country on copyright grounds",
+                            exc.msg,
                         ):
                             continue
                         elif "ffmpeg not found" in exc.msg:
