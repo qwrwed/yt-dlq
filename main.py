@@ -36,12 +36,13 @@ class ProgramArgsNamespace(
     batchfile: Path
     permit_single: bool
     json_file: Path
-    data_dir: Path
+    output_dir: Path
     playlist_duplicates: bool
     text_placeholders: bool
     ffmpeg_location: Path
     use_archives: bool
     no_channels: bool
+    data_only: bool
 
 
 def process_args():
@@ -82,8 +83,8 @@ def process_args():
         ),
     )
     parser.add_argument(
-        "-d",
-        "--data-dir",
+        "-o",
+        "--output-dir",
         metavar="FOLDER",
         help="Main folder to store downloaded videos and other info (default: %(default)s)",
         default="data",
@@ -125,6 +126,12 @@ def process_args():
         "--no-channels",
         action="store_true",
         help="Don't split downloads into folder by channel",
+    )
+    parser.add_argument(
+        "-d",
+        "--data-only",
+        action="store_true",
+        help="Only retrieve URLs; don't download videos"
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())
@@ -405,7 +412,7 @@ def resolve_playlist_groups(ydl, urls_input, args):
             if playlist_subgroup_url in playlist_subgroup_children_urls:
                 # we have a broken (infinite) youtube redirect
                 playlist_group_urls_fixed_path = Path(
-                    args.data_dir, "_json", "playlist_group_urls_fixed.json"
+                    args.output_dir, "_json", "playlist_group_urls_fixed.json"
                 )
                 make_parent_dir(playlist_group_urls_fixed_path)
                 try:
@@ -457,7 +464,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             json_output_filename = restrict_filename(
                 f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
             )
-            json_output_filepath = Path(args.data_dir, "_json", json_output_filename)
+            json_output_filepath = Path(args.output_dir, "_json", json_output_filename)
             atexit.register(
                 lambda: show_retrieved_urls_filepath(json_output_filepath, args)
             )
@@ -472,7 +479,7 @@ def show_retrieved_urls_filepath(json_output_filepath, args):
         return
     print(
         "\nTo skip URL retrieval next time, run:\n"
-        f"python {sys.argv[0]} -j {str(json_output_filepath)!r} -d {args.data_dir}\n"
+        f"python {sys.argv[0]} -j {str(json_output_filepath)!r} -o {args.output_dir}\n"
     )
 
 
@@ -511,7 +518,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
     with YoutubeDL(ydl_opts) as ydl:
         channels = all_urls_dict
         for ch_idx, (channel_id, channel) in enumerate(channels.items()):
-            channel_dir = Path(args.data_dir, restrict_filename(channel["title"]))
+            channel_dir = Path(args.output_dir, restrict_filename(channel["title"]))
             if channel_id:
                 channel_archive_filename = restrict_filename(
                     f"videos_{channel['title']}.txt"
@@ -703,7 +710,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
 def main():
     args = process_args()
     all_urls_dict = get_all_urls_dict(args)
-    download_all(args, all_urls_dict)
+    if not args.data_only:
+        download_all(args, all_urls_dict)
 
 
 if __name__ == "__main__":
