@@ -322,13 +322,10 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
             v_id = video_info["id"]
             v_title = video_info["title"]
             v_url = video_info["webpage_url"]
-
             if v_id in seen_video_ids:
                 continue
             if ch_id in all_urls_dict:
                 channel_dict = all_urls_dict[ch_id]
-                if pl_id in channel_dict["entries"]:
-                    continue
             else:
                 channel_dict = {
                     "id": ch_id,
@@ -339,14 +336,17 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 }
                 all_urls_dict[ch_id] = channel_dict
 
-            playlist_dict = {
-                "id": pl_id,
-                "type": "videos_loose",
-                "title": pl_title,
-                "url": pl_url,
-                "entries": {},
-            }
-            channel_dict["entries"][pl_id] = playlist_dict
+            if pl_id in channel_dict["entries"]:
+                playlist_dict = channel_dict["entries"][pl_id]
+            else:
+                playlist_dict = {
+                    "id": pl_id,
+                    "type": "videos_loose",
+                    "title": pl_title,
+                    "url": pl_url,
+                    "entries": {},
+                }
+                channel_dict["entries"][pl_id] = playlist_dict
 
             video_dict = {
                 "type": "video",
