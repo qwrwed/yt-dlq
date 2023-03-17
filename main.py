@@ -43,6 +43,7 @@ class ProgramArgsNamespace(
     use_archives: bool
     no_channels: bool
     data_only: bool
+    output_format: str
 
 
 def process_args():
@@ -131,7 +132,14 @@ def process_args():
         "-d",
         "--data-only",
         action="store_true",
-        help="Only retrieve URLs; don't download videos"
+        help="Only retrieve URLs; don't download videos",
+    )
+    parser.add_argument(
+        "-f",
+        "--output-format",
+        choices=["mp3", "m4a"],
+        default="m4a",
+        help="Output audio file format",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())
@@ -492,19 +500,28 @@ def match_filter_func(info_dict):
 
 
 def download_all(args: ProgramArgsNamespace, all_urls_dict):
+    postprocessors = [
+        # {
+        #     'key': 'FFmpegExtractAudio',
+        #     'preferredcodec': 'm4a',
+        # },
+        {"key": "FFmpegMetadata"},
+        # {
+        #     "key": "MetadataParser",
+        #     "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
+        # },
+    ]
+    if args.output_format == "mp3":
+        postprocessors.append(
+            {
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }
+        )
     ydl_opts = {
         "format": "m4a/bestaudio/best",
-        "postprocessors": [
-            # {
-            #     'key': 'FFmpegExtractAudio',
-            #     'preferredcodec': 'm4a',
-            # },
-            {"key": "FFmpegMetadata"},
-            # {
-            #     "key": "MetadataParser",
-            #     "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
-            # },
-        ],
+        "postprocessors": postprocessors,
         "postprocessor_args": {"ffmpeg": []},
         "restrictfilenames": True,
         "windowsfilenames": True,
@@ -584,10 +601,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                 }
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
-                    placeholder_path = Path(
+                    expected_path = Path(
                         playlist_dir,
-                        f"{restrict_filename(video['title'])}[{video_id}].txt",
+                        f"{restrict_filename(video['title'])}[{video_id}].{args.output_format}",
                     )
+                    placeholder_path = expected_path.with_suffix(".txt")
                     print(
                         f"  DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}",
                         end="",
@@ -655,7 +673,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         playlist_dir, "%(title)s[%(id)s].%(ext)s"
                     )
                     try:
+                        if args.output_format == "mp3":
+                            ydl.params["keepvideo"] = expected_path.with_suffix(".m4a").is_file()
                         ydl.download([video["url"]])
+                        if args.output_format == "mp3":
+                            del ydl.params["keepvideo"]
                     except DownloadError as exc:
                         if (
                             "Join this channel to get access to members-only content like this video, and other exclusive perks."
