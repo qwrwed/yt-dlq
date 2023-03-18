@@ -261,6 +261,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                     "type": "video",
                     "title": video_entry["title"],
                     "url": video_entry["url"],
+                    "uploader": video_entry["channel_url"],
                     "index": idx + 1,
                 }
                 playlist_dict["entries"][video_entry["id"]] = video_dict
@@ -311,6 +312,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                     "title": video_entry["title"],
                     "url": video_entry["url"],
                     "id": video_entry["id"],
+                    "uploader": ch_url,
                 }
                 playlist_dict["entries"][video_entry["id"]] = video_dict
                 seen_video_ids.add(video_entry["id"])
@@ -330,6 +332,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
             v_id = video_info["id"]
             v_title = video_info["title"]
             v_url = video_info["webpage_url"]
+            v_uploader = video_info["uploader_url"]
             if v_id in seen_video_ids:
                 continue
             if ch_id in all_urls_dict:
@@ -361,6 +364,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 "title": v_title,
                 "url": v_url,
                 "id": v_id,
+                "uploader": v_uploader
             }
             playlist_dict["entries"][v_id] = video_dict
             seen_video_ids.add(v_id)
@@ -510,6 +514,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         #     "key": "MetadataParser",
         #     "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
         # },
+        # { "key" : "FFmpegVideoRemuxer", "preferedformat" : "mkv", }, # required for custom/arbitrary fields
     ]
     if args.output_format == "mp3":
         postprocessors.append(
@@ -667,7 +672,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
 
                     if playlist_id:
                         ppa[-1] = f"track={video_index+1}"
-                    ydl.params["postprocessor_args"]["ffmpeg"] = ppa
+                    uploader_metadata = [
+                        "-metadata",
+                        f"uploader={video['uploader']}",
+                    ] # only compatible with mkv
+                    ydl.params["postprocessor_args"]["ffmpeg"] = ppa + uploader_metadata
 
                     ydl.params["outtmpl"]["default"] = os.path.join(
                         playlist_dir, "%(title)s[%(id)s].%(ext)s"
