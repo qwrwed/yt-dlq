@@ -1,8 +1,8 @@
 # from pprint import pprint
 
-from yt_dlq.url import get_all_urls_dict
 from yt_dlq.args import process_args
 from yt_dlq.download import download_all
+from yt_dlq.url import get_all_urls_dict
 
 
 def main():
