@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 from yt_dlp import YoutubeDL
 
-from utils.file import make_parent_dir, restrict_filename
+from yt_dlq.file import make_parent_dir, restrict_filename
 
 if TYPE_CHECKING:
     from typing import Optional
 
-    from utils.args import ProgramArgsNamespace
+    from yt_dlq.args import ProgramArgsNamespace
 
 PATTERN_ID = r"[@\w\-]+"
 PATTERN_QUERY = r"(?:\?[\w=\&]+)"

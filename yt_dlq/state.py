@@ -1,7 +1,7 @@
 import json
 
-from utils.file import make_parent_dir
-from utils.types import DownloadStates
+from yt_dlq.file import make_parent_dir
+from yt_dlq.types import DownloadStates
 
 
 def get_archive_id(info_dict: dict):

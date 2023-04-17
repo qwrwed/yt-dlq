@@ -1,4 +1,3 @@
-# from pprint import pprint
 import os
 import re
 from pathlib import Path
@@ -6,19 +5,11 @@ from pathlib import Path
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from utils.url import get_all_urls_dict
-from utils.args import ProgramArgsNamespace, process_args
-from utils.file import make_parent_dir, restrict_filename
-from utils.state import get_download_state, set_download_state
-from utils.types import DownloadStates
-
-
-def match_filter_func(info_dict):
-    if info_dict.get("is_live") is True or info_dict.get("was_live") is True:
-        return "Video is/was livestream; skipping"
-    # if info_dict.get("availability") != 'public':
-    #     return "Video is private; skipping"
-    return None
+from yt_dlq.args import ProgramArgsNamespace
+from yt_dlq.file import make_parent_dir, restrict_filename
+from yt_dlq.state import get_download_state, set_download_state
+from yt_dlq.types import DownloadStates
+from yt_dlq.utils import match_filter_func
 
 
 def download_all(args: ProgramArgsNamespace, all_urls_dict):
@@ -256,14 +247,3 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
     if failed_downloads:
         print(f"{len(failed_downloads)} failed downloads")
         breakpoint()
-
-
-def main():
-    args = process_args()
-    all_urls_dict = get_all_urls_dict(args)
-    if not args.data_only:
-        download_all(args, all_urls_dict)
-
-
-if __name__ == "__main__":
-    main()

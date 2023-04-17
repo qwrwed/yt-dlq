@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+
 class ProgramArgsNamespace(
     argparse.Namespace
 ):  # pylint: disable=too-few-public-methods
