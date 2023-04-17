@@ -1,32 +1,23 @@
-# from pdb import set_trace
 # from pprint import pprint
 
-import atexit
 import argparse
-from datetime import datetime
+import atexit
 import json
 import os
-from pathlib import Path
-from pdb import set_trace
 import re
 import sys
+from datetime import datetime
+from pathlib import Path
+from pdb import set_trace
 from typing import Optional
 
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError
 
-from utils import (
-    URL_TYPE_PATTERNS,
-    DownloadStates,
-    get_download_state,
-    make_parent_dir,
-    # already_in_archive,
-    # read_entry_extended,
-    restrict_filename,
-    set_download_state,
-    # write_entry_extended,
-    # write_to_archives,
-)
+from utils.file import make_parent_dir, restrict_filename
+from utils.state import get_download_state, set_download_state
+from utils.string import URL_TYPE_PATTERNS
+from utils.types import DownloadStates
 
 
 class ProgramArgsNamespace(
