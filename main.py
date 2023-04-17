@@ -355,7 +355,7 @@ def construct_all_urls_dict(urls_input, args: ProgramArgsNamespace):
                 "title": v_title,
                 "url": v_url,
                 "id": v_id,
-                "uploader": v_uploader
+                "uploader": v_uploader,
             }
             playlist_dict["entries"][v_id] = video_dict
             seen_video_ids.add(v_id)
@@ -666,7 +666,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     uploader_metadata = [
                         "-metadata",
                         f"uploader={video['uploader']}",
-                    ] # only compatible with mkv
+                    ]  # only compatible with mkv
                     ydl.params["postprocessor_args"]["ffmpeg"] = ppa + uploader_metadata
 
                     ydl.params["outtmpl"]["default"] = os.path.join(
@@ -674,7 +674,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     )
                     try:
                         if args.output_format == "mp3":
-                            ydl.params["keepvideo"] = expected_path.with_suffix(".m4a").is_file()
+                            ydl.params["keepvideo"] = expected_path.with_suffix(
+                                ".m4a"
+                            ).is_file()
                         ydl.download([video["url"]])
                         if args.output_format == "mp3":
                             del ydl.params["keepvideo"]
