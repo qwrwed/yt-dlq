@@ -24,6 +24,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         #     "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
         # },
         # { "key" : "FFmpegVideoRemuxer", "preferedformat" : "mkv", }, # required for custom/arbitrary fields
+        {"key": "EmbedThumbnail"},
     ]
     if args.output_format == "mp3":
         postprocessors.append(
@@ -34,6 +35,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             }
         )
     ydl_opts = {
+        "verbose": args.verbose,
         "format": "m4a/bestaudio/best",
         "postprocessors": postprocessors,
         "postprocessor_args": {"ffmpeg": []},
@@ -44,6 +46,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         # "ffmpeg_location": None,
         "match_filter": match_filter_func,
         "ffmpeg_location": args.ffmpeg_location,
+        # "embedthumbnail": True,
+        "writethumbnail": True,
     }
     failed_downloads = []
     with YoutubeDL(ydl_opts) as ydl:
@@ -70,7 +74,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             playlists = channel["entries"]
             for pl_idx, (playlist_id, playlist) in enumerate(playlists.items()):
                 print(
-                    f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}",
+                    f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}:",
                     end=" ",
                 )
                 archives_to_write = [channel_archive_filepath]
@@ -80,15 +84,24 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                 ]
                 if playlist_id:
                     print(f"{playlist['title']!r}")
+                    album_name = playlist["music_info"]["album"]
+                    playlist_dir_components = [
+                        channel_dir,
+                        restrict_filename(playlist["title"]),
+                    ]
+                    if playlist["type"] == "release":
+                        playlist_dir_components.insert(1, "releases")
+                        if len(playlist["entries"]) <= 1 and not args.permit_single:
+                            # remove release folder if release doesn't have multiple entries
+                            playlist_dir_components.pop()
+                            album_name = "Releases"
                     ppa += [
                         "-metadata",
-                        f"album={playlist['title']}",
+                        f"album={album_name}",
                         "-metadata",
                         "track=0",
                     ]
-                    playlist_dir = Path(
-                        channel_dir, restrict_filename(playlist["title"])
-                    )
+                    playlist_dir = Path(*playlist_dir_components)
                     playlist_archive_filename = restrict_filename(
                         f"playlist_{playlist['title']}.txt"
                     )
@@ -102,7 +115,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     print(f"[loose videos] {channel['title']!r}")
                     ppa += [
                         "-metadata",
-                        f"album=[Videos]{channel['title']}",
+                        # f"album={channel['title']}",
+                        f"album=Videos",
                     ]
                     playlist_dir = channel_dir
                     # archive_filename = channel_archive_filename
@@ -112,6 +126,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     "channel_title": channel["title"],
                     "playlist_id": playlist_id,
                     "playlist_title": playlist["title"],
+                    "playlist_type": playlist["type"],
                 }
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
@@ -146,6 +161,11 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                 if args.playlist_duplicates:
                                     is_duplicate = True
                                     print(" (DUPLICATES ENABLED)")
+                                elif (
+                                    channel_playlist_info["playlist_type"] == "release"
+                                ):
+                                    is_duplicate = True
+                                    print(" (DUPLICATES ALLOWED IN RELEASES)")
                                 elif args.text_placeholders:
                                     print(" - CREATING PLACEHOLDER")
                                     make_parent_dir(placeholder_path)
@@ -179,40 +199,55 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     else:
                         video_download_state = DownloadStates.NEVER_DOWNLOADED
 
-                    if playlist_id:
+                    if playlist_id and len(playlist["entries"]) > 1:
                         ppa[-1] = f"track={video_index+1}"
                     uploader_metadata = [
                         "-metadata",
                         f"uploader={video['uploader']}",
                     ]  # only compatible with mkv
-                    ydl.params["postprocessor_args"]["ffmpeg"] = ppa + uploader_metadata
+                    year_metadata = ["-metadata", f"date={video['upload_date']}"]
+                    ydl.params["postprocessor_args"]["ffmpeg"] = (
+                        ppa + uploader_metadata + year_metadata
+                    )
 
                     ydl.params["outtmpl"]["default"] = os.path.join(
                         playlist_dir, "%(title)s[%(id)s].%(ext)s"
                     )
-                    try:
-                        if args.output_format == "mp3":
-                            ydl.params["keepvideo"] = expected_path.with_suffix(
-                                ".m4a"
-                            ).is_file()
-                        ydl.download([video["url"]])
-                        if args.output_format == "mp3":
-                            del ydl.params["keepvideo"]
-                    except DownloadError as exc:
-                        if (
-                            "Join this channel to get access to members-only content like this video, and other exclusive perks."
-                            in exc.msg
-                        ):
-                            continue
-                        elif re.search(
-                            "Video unavailable. This video contains content from .*, who has blocked it in your country on copyright grounds",
-                            exc.msg,
-                        ):
-                            continue
-                        elif "ffmpeg not found" in exc.msg:
-                            print("  Install by running 'python download_ffmpeg.py'")
-                            exit()
-                        raise
+                    if args.output_format == "mp3":
+                        ydl.params["keepvideo"] = expected_path.with_suffix(
+                            ".m4a"
+                        ).is_file()
+                    while True:
+                        try:
+                            ydl.download([video["url"]])
+                            break
+                        except DownloadError as exc:
+                            if "WinError" in exc.msg:
+                                continue
+                            elif (
+                                "Join this channel to get access to members-only content like this video, and other exclusive perks."
+                                in exc.msg
+                            ):
+                                break
+                            elif re.search(
+                                "Video unavailable. This video contains content from .*, who has blocked it in your country on copyright grounds",
+                                exc.msg,
+                            ):
+                                break
+                            elif "ffmpeg not found" in exc.msg:
+                                print(
+                                    "  Install by running 'python download_ffmpeg.py'"
+                                )
+                                exit()
+                            else:
+                                breakpoint()
+                            raise
+                        # TODO: PermissionError: [WinError 5] Access is denied: '{path}.temp.m4a' -> '{path}.m4a'
+                        finally:
+                            # TODO: check if this works after `break``
+                            if args.output_format == "mp3":
+                                del ydl.params["keepvideo"]
+
                     # try:
                     #     retcode =
                     # except DownloadError as exc:

@@ -1,3 +1,6 @@
+import re
+
+
 def escape_spaces(arg, use_singlequote=False):
     quote = "'" if use_singlequote else "'"
     return (
@@ -13,3 +16,10 @@ def match_filter_func(info_dict):
     # if info_dict.get("availability") != 'public':
     #     return "Video is private; skipping"
     return None
+
+
+def hyphenate_date(YYYYMMDD: str):
+    match = re.match("(\d{4})(\d{2})(\d{2})", YYYYMMDD)
+    if not match:
+        raise ValueError(f"date {YYYYMMDD} not recognised")
+    return "-".join(match.groups())

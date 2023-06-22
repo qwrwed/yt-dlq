@@ -1,11 +1,13 @@
 import argparse
 from pathlib import Path
 
+from yt_dlq.types import Url
+
 
 class ProgramArgsNamespace(
     argparse.Namespace
 ):  # pylint: disable=too-few-public-methods
-    url: str
+    url: Url
     batchfile: Path
     permit_single: bool
     json_file: Path
@@ -17,6 +19,7 @@ class ProgramArgsNamespace(
     no_channels: bool
     data_only: bool
     output_format: str
+    verbose: bool
 
 
 def process_args():
@@ -52,8 +55,8 @@ def process_args():
         "--permit-single",
         action="store_true",
         help=(
-            "Allow playlists with only one video to have their own folder. "
-            "Otherwise, ignore such videos and treat them as not having a playlist."
+            "Allow releases with only one video to have their own folder. "
+            "Otherwise, they will be downloaded to the `releases` subfolder."
         ),
     )
     parser.add_argument(
@@ -113,6 +116,12 @@ def process_args():
         choices=["mp3", "m4a"],
         default="m4a",
         help="Output audio file format",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Use downloader in verbose mode",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())

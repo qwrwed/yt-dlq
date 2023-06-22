@@ -1,4 +1,11 @@
 from enum import Enum
+from typing import Optional
+
+Url = str
+UrlList = list[Url]
+UrlCategoryDict = dict[str, UrlList]
+
+PLAYLIST_CATEGORIES = ("release", "playlist")
 
 
 class DownloadStates(str, Enum):
