@@ -158,66 +158,6 @@ def sort_playlist_groups(playlist_groups_resolved):
     return {albums_singles_key: albums_singles_url, **playlist_groups_resolved}
 
 
-def resolve_playlist_groups(
-    ydl: YoutubeDL, urls_input: dict[str, set[str]], args: ProgramArgsNamespace
-):
-    """turns playlist groups into playlists"""
-    playlist_groups_resolved = {}
-    for tab in ("releases", "playlists"):
-        playlist_groups_resolved_tab = {}
-        urls_group_playlist = urls_input[f"channel_group_{tab}"]
-        for i, playlist_group_url in enumerate(urls_group_playlist):
-            # playlist group e.g. https://www.youtube.com/c/daftpunk/playlists or
-            # playlist subgroup e.g. https://www.youtube.com/c/daftpunk/playlists?view=71&sort=dd&shelf_id=0
-            playlist_group_info = retrieve_info(
-                ydl=ydl,
-                category="playlist group",
-                url=playlist_group_url,
-                counter=(i + 1, len(urls_group_playlist)),
-            )
-            playlist_group_contents_unresolved = playlist_group_info["entries"]
-            # pprint(playlist_group_contents_unresolved)
-            playlist_group_content_categories = {
-                get_url_category(entry["url"])[0]
-                for entry in playlist_group_contents_unresolved
-            }
-            if playlist_group_content_categories == {"playlist"}:
-                playlist_groups_resolved_tab[
-                    playlist_group_info["title"]
-                ] = playlist_group_url
-                continue
-            for i, playlist_subgroup_entry in enumerate(
-                playlist_group_contents_unresolved
-            ):
-                # pprint(playlist_subgroup_entry)
-                playlist_subgroup_title = playlist_subgroup_entry["title"]
-                playlist_subgroup_url = playlist_subgroup_entry["url"]
-                while True:
-                    playlist_subgroup_info = retrieve_info(
-                        ydl=ydl,
-                        category="playlist subgroup",
-                        url=playlist_subgroup_url,
-                        counter=(i + 1, len(playlist_group_contents_unresolved)),
-                        info_func=lambda *args: playlist_subgroup_title,
-                    )
-                    if playlist_subgroup_url not in {
-                        entry["url"] for entry in playlist_subgroup_info["entries"]
-                    }:
-                        playlist_groups_resolved[tab][
-                            playlist_subgroup_title
-                        ] = playlist_subgroup_url
-                        break
-                    else:
-                        playlist_subgroup_url = resolve_recursive_playlist_group(
-                            playlist_subgroup_url, playlist_subgroup_title
-                        )
-        playlist_subgroup_children = playlist_subgroup_info["entries"]
-        playlist_subgroup_children_urls = {
-            child["url"] for child in playlist_subgroup_children
-        }
-        breakpoint()
-
-
 class YoutubeInfoExtractor:
     def __init__(self, args: ProgramArgsNamespace) -> None:
         self.args = args
@@ -314,6 +254,66 @@ class YoutubeInfoExtractor:
             for category in url_dict_original.keys()
         }
         return url_dict_resolved
+
+    def resolve_playlist_groups(
+        self, urls_input: dict[str, set[str]], args: ProgramArgsNamespace
+    ):
+        """turns playlist groups into playlists"""
+        ydl = self.ydl
+        playlist_groups_resolved_tab = {}
+        urls_group_playlist = urls_input["playlist"]
+        playlist_urls_resolved = set()
+        for i, playlist_group_url in enumerate(urls_group_playlist):
+            # playlist group e.g. https://www.youtube.com/c/daftpunk/playlists or
+            # playlist subgroup e.g. https://www.youtube.com/c/daftpunk/playlists?view=71&sort=dd&shelf_id=0
+            playlist_group_info = retrieve_info(
+                ydl=ydl,
+                category="playlist group",
+                url=playlist_group_url,
+                counter=(i + 1, len(urls_group_playlist)),
+            )
+            playlist_group_contents_unresolved = playlist_group_info["entries"]
+            # pprint(playlist_group_contents_unresolved)
+            playlist_group_content_categories = {
+                get_url_category(entry["url"])[0]
+                for entry in playlist_group_contents_unresolved
+            }
+            if playlist_group_content_categories == {"playlist"}:
+                playlist_urls_resolved |= {playlist["url"] for playlist in playlist_group_contents_unresolved}
+                continue
+            ## only to be updated if able to reproduce issue:
+            # for i, playlist_subgroup_entry in enumerate(
+            #     playlist_group_contents_unresolved
+            # ):
+            #     # pprint(playlist_subgroup_entry)
+            #     playlist_subgroup_title = playlist_subgroup_entry["title"]
+            #     playlist_subgroup_url = playlist_subgroup_entry["url"]
+            #     while True:
+            #         playlist_subgroup_info = retrieve_info(
+            #             ydl=ydl,
+            #             category="playlist subgroup",
+            #             url=playlist_subgroup_url,
+            #             counter=(i + 1, len(playlist_group_contents_unresolved)),
+            #             info_func=lambda *args: playlist_subgroup_title,
+            #         )
+            #         if playlist_subgroup_url not in {
+            #             entry["url"] for entry in playlist_subgroup_info["entries"]
+            #         }:
+            #             playlist_groups_resolved["playlist"][
+            #                 playlist_subgroup_title
+            #             ] = playlist_subgroup_url
+            #             break
+            #         else:
+            #             playlist_subgroup_url = resolve_recursive_playlist_group(
+            #                 playlist_subgroup_url, playlist_subgroup_title
+            #             )
+            # playlist_subgroup_children = playlist_subgroup_info["entries"]
+            # playlist_subgroup_children_urls = {
+            #     child["url"] for child in playlist_subgroup_children
+            # }
+
+        # playlist_urls_resolved.extend(playlist_groups_resolved_tab.values())
+        return {**urls_input, "playlist": playlist_urls_resolved}
 
     def add_playlists_to_url_info_dict(
         self,
@@ -610,8 +610,11 @@ class YoutubeInfoExtractor:
         urls_input_list: UrlCategoryDict,
     ):
         urls_input_dict_categorised = categorise_urls(urls_input_list)
-        urls_input_dict_resolved = self.resolve_channel_urls(
+        urls_input_dict_channels_resolved = self.resolve_channel_urls(
             urls_input_dict_categorised
+        )
+        urls_input_dict_resolved = self.resolve_playlist_groups(
+            urls_input_dict_channels_resolved, self.args
         )
         self.add_playlists_to_url_info_dict(urls_input_dict_resolved)
         self.add_channels_to_url_info_dict(urls_input_dict_resolved)
