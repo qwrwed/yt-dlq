@@ -281,6 +281,10 @@ class YoutubeInfoExtractor:
             if playlist_group_content_categories == {"playlist"}:
                 playlist_urls_resolved |= {playlist["url"] for playlist in playlist_group_contents_unresolved}
                 continue
+            elif playlist_group_content_categories == {"video"}:
+                playlist_urls_resolved.add(playlist_group_url)
+                continue
+            raise NotImplementedError
             ## only to be updated if able to reproduce issue:
             # for i, playlist_subgroup_entry in enumerate(
             #     playlist_group_contents_unresolved
