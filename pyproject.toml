@@ -1,0 +1,9 @@
+[project]
+name = "yt-dlq"
+version = "0.5.0"
+
+[tool.setuptools]
+packages = ["yt_dlq"]
+
+[project.scripts]
+yt-dlq = "yt_dlq.__main__:main"

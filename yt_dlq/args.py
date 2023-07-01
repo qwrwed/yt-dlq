@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 
 from yt_dlq.types import Url
+from yt_dlq.file import generate_json_output_filename
 
 
 class ProgramArgsNamespace(
@@ -20,6 +21,7 @@ class ProgramArgsNamespace(
     data_only: bool
     output_format: str
     verbose: bool
+    json_file_name: str
 
 
 def process_args():
@@ -122,6 +124,11 @@ def process_args():
         "--verbose",
         action="store_true",
         help="Use downloader in verbose mode",
+    )
+    parser.add_argument(
+        "-s",
+        "--json-file-suffix",
+        help="Suffix for output JSON file name.",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())

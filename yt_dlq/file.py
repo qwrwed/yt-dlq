@@ -1,7 +1,9 @@
 import functools
 import shutil
 import zipfile
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import requests
 from tqdm.auto import tqdm
@@ -25,6 +27,14 @@ from yt_dlp.utils import sanitize_filename
 
 def restrict_filename(filename):
     return sanitize_filename(filename, restricted=True)
+
+
+def generate_json_output_filename(suffix: Optional[str]):
+    suffix = suffix or ""
+    if suffix and not suffix.startswith("_"):
+        suffix = "_" + suffix
+    ts = datetime.now()
+    return restrict_filename(f"urls_all_{ts.replace(microsecond=0).isoformat()}{suffix}.json")
 
 
 def download(url, filepath, verbose=True):

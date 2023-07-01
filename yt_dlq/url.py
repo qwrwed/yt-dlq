@@ -15,7 +15,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, int_or_none
 
 from yt_dlq.args import ProgramArgsNamespace
-from yt_dlq.file import make_parent_dir, restrict_filename
+from yt_dlq.file import make_parent_dir, generate_json_output_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES
 from yt_dlq.utils import hyphenate_date
@@ -279,7 +279,9 @@ class YoutubeInfoExtractor:
                 for entry in playlist_group_contents_unresolved
             }
             if playlist_group_content_categories == {"playlist"}:
-                playlist_urls_resolved |= {playlist["url"] for playlist in playlist_group_contents_unresolved}
+                playlist_urls_resolved |= {
+                    playlist["url"] for playlist in playlist_group_contents_unresolved
+                }
                 continue
             elif playlist_group_content_categories == {"video"}:
                 playlist_urls_resolved.add(playlist_group_url)
@@ -637,9 +639,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
 
     if args.use_archives:
-        json_output_filename = restrict_filename(
-            f"urls_all_{datetime.now().replace(microsecond=0).isoformat()}.json"
-        )
+        json_output_filename = generate_json_output_filename(args.json_file_suffix)
         json_output_filepath = Path(args.output_dir, "_json", json_output_filename)
         atexit.register(
             lambda: show_retrieved_urls_filepath(json_output_filepath, args)
