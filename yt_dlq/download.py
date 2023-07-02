@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from pathlib import Path
 
 from yt_dlp import YoutubeDL
@@ -217,7 +218,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         ydl.params["keepvideo"] = expected_path.with_suffix(
                             ".m4a"
                         ).is_file()
+                    tries = 0
                     while True:
+                        tries += 1
                         try:
                             ydl.download([video["url"]])
                             break
@@ -244,15 +247,15 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                 breakpoint()
                             raise
                         except PermissionError as exc:
-                            if "WinError" in exc.msg:
-                                continue
-                            else:
-                                breakpoint()
+                            if tries >= 5:
+                                raise
+                            print(exc)
+                            time.sleep(5)
+                            continue
                         except Exception as exc:
                             breakpoint()
-                        # TODO: PermissionError: [WinError 5] Access is denied: '{path}.temp.m4a' -> '{path}.m4a'
+                            pass
                         finally:
-                            # TODO: check if this works after `break``
                             if args.output_format == "mp3":
                                 del ydl.params["keepvideo"]
 

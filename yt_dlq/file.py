@@ -34,7 +34,9 @@ def generate_json_output_filename(suffix: Optional[str]):
     if suffix and not suffix.startswith("_"):
         suffix = "_" + suffix
     ts = datetime.now()
-    return restrict_filename(f"urls_all_{ts.replace(microsecond=0).isoformat()}{suffix}.json")
+    return restrict_filename(
+        f"urls_all_{ts.replace(microsecond=0).isoformat()}{suffix}.json"
+    )
 
 
 def download(url, filepath, verbose=True):

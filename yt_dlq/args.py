@@ -1,8 +1,8 @@
 import argparse
 from pathlib import Path
 
-from yt_dlq.types import Url
 from yt_dlq.file import generate_json_output_filename
+from yt_dlq.types import Url
 
 
 class ProgramArgsNamespace(
