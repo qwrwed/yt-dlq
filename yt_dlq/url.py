@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 pprint = partial(pprint, sort_dicts=False)
 patch_extract_metadata_from_tabs()
-patch_releases_tab()
+# patch_releases_tab() # https://github.com/yt-dlp/yt-dlp/issues/6893
 
 PATTERN_ID = r"[@\w\-]+"
 PATTERN_QUERY = r"(?:\?[\w=\&]+)"
