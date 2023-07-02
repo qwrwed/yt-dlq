@@ -14,6 +14,8 @@ Given a channel URL, yt-dlq will download the following as audio files, in order
     - A video will only be downloaded if it hasn't already been seen in a release or a standard playlist.
     - _Artist_ is the video's uploader, _Album_ is "Videos" (subject to change) and _Album Artist_ is the video's uploader.
 
+You can also provide URLs for a channel's playlists/releases/videos or individual playlists/videos.
+
 Album art will also be embedded into each file.
 
 Downloaded files will be organised into folders by album artist/channel, then album/playlist:
@@ -39,10 +41,20 @@ pip install -e .
 ```
 
 ## Usage
-Simple usage:
+Simple usage providing a URL via command line:
 ```shell 
 yt-dlq https://www.youtube.com/watch?v=dQw4w9WgXcQ&pp=ygUJcmljayByb2xs
 ```
+
+You can also provide a text file with a list of URLs.
+```
+# batchfile.txt
+https://www.youtube.com/watch?v=dQw4w9WgXcQ&pp=ygUJcmljayByb2xs # for each line, everything after any '#' is ignored
+```
+```shell
+(venv) $ yt-dlq -a ./batchfile.txt
+```
+
 Type `yt-dlq --help` for a full description of command-line arguments:
 ```
 (venv) $ yt-dlq --help
