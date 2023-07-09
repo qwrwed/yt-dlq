@@ -29,13 +29,13 @@ def restrict_filename(filename):
     return sanitize_filename(filename, restricted=True)
 
 
-def generate_json_output_filename(suffix: Optional[str]):
-    suffix = suffix or ""
-    if suffix and not suffix.startswith("_"):
-        suffix = "_" + suffix
+def generate_json_output_filename(prefix: Optional[str]):
+    prefix = prefix or ""
+    if prefix and not prefix.endswith("_"):
+        prefix = prefix + "_"
     ts = datetime.now()
     return restrict_filename(
-        f"urls_all_{ts.replace(microsecond=0).isoformat()}{suffix}.json"
+        f"{prefix}urls_all_{ts.replace(microsecond=0).isoformat()}.json"
     )
 
 

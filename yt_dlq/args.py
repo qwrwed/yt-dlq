@@ -21,7 +21,7 @@ class ProgramArgsNamespace(
     data_only: bool
     output_format: str
     verbose: bool
-    json_file_name: str
+    json_file_prefix: str
 
 
 def process_args():
@@ -127,8 +127,8 @@ def process_args():
     )
     parser.add_argument(
         "-s",
-        "--json-file-suffix",
-        help="Suffix for output JSON file name.",
+        "--json-file-prefix",
+        help="Prefix for output JSON file name.",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())

@@ -5,6 +5,7 @@ import argparse
 import json
 from copy import deepcopy
 from pathlib import Path
+from typing import Optional
 
 
 class ArgsNamespace(argparse.Namespace):
@@ -12,6 +13,10 @@ class ArgsNamespace(argparse.Namespace):
     output_suffix: str = "_filtered"
     video_includes: list[str] = []
     video_excludes: list[str] = []
+    description_includes: list[str] = []
+    description_excludes: list[str] = []
+    duration_greater_than: Optional[int]
+    duration_less_than: Optional[int]
 
 
 def ensure_underscore_str(input_: any):
@@ -37,6 +42,18 @@ def get_args():
     parser.add_argument("-vi", "--video-includes", type=comma_separated_str_to_list)
     parser.add_argument("-vx", "--video-excludes", type=comma_separated_str_to_list)
 
+    parser.add_argument(
+        "-di", "--description-includes", type=comma_separated_str_to_list
+    )
+    parser.add_argument(
+        "-dx", "--description-excludes", type=comma_separated_str_to_list
+    )
+
+    parser.add_argument(
+        "-dg", "--duration_greater_than", type=int, metavar="NUM_SECONDS"
+    )
+    parser.add_argument("-dl", "--duration_less_than", type=int, metavar="NUM_SECONDS")
+
     return parser.parse_args(namespace=ArgsNamespace)
 
 
@@ -51,19 +68,60 @@ if __name__ == "__main__":
     for channel_id, channel_dict in urls_dict_input.items():
         for playlist_id, playlist_dict in channel_dict["entries"].items():
             video_ids = set()
-            video_ids_with_included = set()
-            video_ids_with_excluded = set()
+            video_ids_with_included_title = set()
+            video_ids_with_excluded_title = set()
+            video_ids_with_included_description = set()
+            video_ids_with_excluded_description = set()
+            video_ids_with_duration_greater_than = set()
+            video_ids_with_duration_less_than = set()
+
             for video_id, video_dict in playlist_dict["entries"].items():
                 video_ids.add(video_id)
                 video_title = video_dict["title"].lower()
+                video_description = video_dict["description"].lower()
+                video_duration = video_dict["duration"]
                 if any(include in video_title for include in args.video_includes):
-                    video_ids_with_included.add(video_id)
+                    video_ids_with_included_title.add(video_id)
                 if any(exclude in video_title for exclude in args.video_excludes):
-                    video_ids_with_excluded.add(video_id)
+                    video_ids_with_excluded_title.add(video_id)
 
-            video_ids_to_keep = set() | (video_ids - video_ids_with_excluded)
-            if args.video_includes:
-                video_ids_to_keep &= video_ids_with_included
+                if any(
+                    include in video_description
+                    for include in args.description_includes
+                ):
+                    video_ids_with_included_description.add(video_id)
+                if any(
+                    exclude in video_description
+                    for exclude in args.description_excludes
+                ):
+                    video_ids_with_excluded_description.add(video_id)
+
+                if (
+                    args.duration_greater_than
+                    and video_duration >= args.duration_greater_than
+                ):
+                    video_ids_with_duration_greater_than.add(video_id)
+
+                if args.duration_less_than and video_duration <= args.duration_less_than:
+                    video_ids_with_duration_less_than.add(video_id)
+
+            video_ids_to_keep = set() | (
+                video_ids
+                - (video_ids_with_excluded_title | video_ids_with_excluded_description)
+            )
+
+            if (
+                args.video_includes
+                or args.description_includes
+                or args.duration_greater_than
+                or args.duration_less_than
+            ):
+                video_ids_to_keep &= (
+                    video_ids_with_included_title
+                    | video_ids_with_included_description
+                    | video_ids_with_duration_greater_than
+                    | video_ids_with_duration_less_than
+                )
 
             video_ids_to_remove = video_ids - video_ids_to_keep
 
@@ -94,5 +152,5 @@ if __name__ == "__main__":
         input_filepath, args.output_suffix + "_removed"
     )
     with open(output_file_removed, "w+") as f:
-        json.dump(urls_dict_keep, f, indent=4)
+        json.dump(urls_dict_remove, f, indent=4)
     print(f"wrote removed urls to {output_file_removed}")

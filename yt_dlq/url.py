@@ -390,6 +390,7 @@ class YoutubeInfoExtractor:
                     "url": pl_url,
                     "music_info": playlist_info["music_info"],
                     "entries": {},
+                    "description": playlist_info["description"],
                 }
                 channel_dict["entries"][pl_id] = playlist_dict
 
@@ -410,6 +411,7 @@ class YoutubeInfoExtractor:
                     except DownloadError as exc:
                         continue
 
+                    video_info = self.get_info(video_entry["url"])
                     video_dict = {
                         "id": video_entry["id"],
                         "type": "video",
@@ -418,11 +420,11 @@ class YoutubeInfoExtractor:
                         "upload_date": hyphenate_date(video_info_full["upload_date"]),
                         "uploader": video_entry["channel_url"],
                         "index": idx + 1,
+                        "music_info": self.music_info_from_description(video_info),
+                        "description": video_info["description"],
+                        "duration": video_info["duration"],
                     }
-
-                    video_dict["music_info"] = self.music_info_from_url(
-                        video_entry["url"]
-                    )
+                    
                     playlist_dict["entries"][video_entry["id"]] = video_dict
 
                     self.seen_video_ids.add(video_entry["id"])
@@ -467,6 +469,7 @@ class YoutubeInfoExtractor:
                     "title": ch_title,
                     "url": ch_url,
                     "entries": {},
+                    "description": channel_videos_info["description"],
                 }
                 self.url_info_dict[ch_id] = channel_dict
 
@@ -504,6 +507,8 @@ class YoutubeInfoExtractor:
                     "url": video_entry["url"],
                     "upload_date": hyphenate_date(video_info_full["upload_date"]),
                     "uploader": ch_url,
+                    "description": video_info_full["description"],
+                    "duration": video_info_full["duration"],
                 }
                 playlist_dict["entries"][video_entry["id"]] = video_dict
                 self.seen_video_ids.add(video_entry["id"])
@@ -573,6 +578,8 @@ class YoutubeInfoExtractor:
                 "url": video_info["webpage_url"],
                 "upload_date": hyphenate_date(video_info["upload_date"]),
                 "uploader": video_info["uploader_url"],
+                "description": video_info["description"],
+                "duration": video_info["duration"],
             }
             playlist_dict["entries"][video_info["id"]] = video_dict
             self.seen_video_ids.add(video_info["id"])
@@ -639,7 +646,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
 
     if args.use_archives:
-        json_output_filename = generate_json_output_filename(args.json_file_suffix)
+        json_output_filename = generate_json_output_filename(args.json_file_prefix)
         json_output_filepath = Path(args.output_dir, "_json", json_output_filename)
         atexit.register(
             lambda: show_retrieved_urls_filepath(json_output_filepath, args)
