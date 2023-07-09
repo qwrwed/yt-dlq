@@ -117,7 +117,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     ppa += [
                         "-metadata",
                         # f"album={channel['title']}",
-                        f"album=Videos",
+                        # f"album=Videos",
+                        f"album={channel['title']}::Videos",
                     ]
                     playlist_dir = channel_dir
                     # archive_filename = channel_archive_filename
