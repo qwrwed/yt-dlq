@@ -83,9 +83,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     "-metadata",
                     f"album_artist={channel['title']}",
                 ]
-                if playlist_id:
+                if playlist["title"]:
                     print(f"{playlist['title']!r}")
-                    album_name = playlist["music_info"]["album"]
+                    album_name = (playlist.get("music_info") or {}).get("album") or playlist["title"]
                     playlist_dir_components = [
                         channel_dir,
                         restrict_filename(playlist["title"]),
