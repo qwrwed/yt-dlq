@@ -226,10 +226,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             ydl.download([video["url"]])
                             break
                         except DownloadError as exc:
-                            # if "WinError" in exc.msg:
-                            # continue
-                            # elif (
-                            if (
+                            if "WinError" in exc.msg:
+                                continue
+                            elif (
                                 "Join this channel to get access to members-only content like this video, and other exclusive perks."
                                 in exc.msg
                             ):
