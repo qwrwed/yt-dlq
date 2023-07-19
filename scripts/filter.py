@@ -10,6 +10,7 @@ from typing import Optional
 
 class ArgsNamespace(argparse.Namespace):
     input_file: Path
+    no_modify: bool = False
     output_suffix: str = "_filtered"
     video_includes: list[str] = []
     video_excludes: list[str] = []
@@ -38,6 +39,15 @@ def get_args():
 
     parser.add_argument("input_file", metavar="INPUT_FILE", type=Path)
     parser.add_argument("-s", "--output-suffix", type=ensure_underscore_str)
+    parser.add_argument(
+        "-n",
+        "--no-modify",
+        action="store_true",
+        help="""
+        If provided, will create one new file with matching videos and one new file with non-matching videos, keeping input file unchanged.
+        Otherwise, will create one new file with matching videos and change input file only contain non-matching videos.
+        """,
+    )
 
     parser.add_argument("-vi", "--video-includes", type=comma_separated_str_to_list)
     parser.add_argument("-vx", "--video-excludes", type=comma_separated_str_to_list)
@@ -148,9 +158,12 @@ if __name__ == "__main__":
         json.dump(urls_dict_keep, f, indent=4)
     print(f"wrote kept urls to {output_file_kept}")
 
-    output_file_removed = add_stem_suffix(
-        input_filepath, args.output_suffix + "_removed"
-    )
+    if args.no_modify:
+        output_file_removed = add_stem_suffix(
+            input_filepath, args.output_suffix + "_removed"
+        )
+    else:
+        output_file_removed = input_filepath
     with open(output_file_removed, "w+") as f:
         json.dump(urls_dict_remove, f, indent=4)
     print(f"wrote removed urls to {output_file_removed}")

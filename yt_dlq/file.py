@@ -1,11 +1,15 @@
 import functools
+import json
 import shutil
 import zipfile
+from copy import deepcopy
 from datetime import datetime
+from glob import glob
 from pathlib import Path
 from typing import Optional
 
 import requests
+from mergedeep import merge
 from tqdm.auto import tqdm
 
 
@@ -37,6 +41,30 @@ def generate_json_output_filename(prefix: Optional[str]):
     return restrict_filename(
         f"{prefix}urls_all_{ts.replace(microsecond=0).isoformat()}.json"
     )
+
+
+def resolve_json_files(json_file_expression: Path):
+    return [Path(json_file) for json_file in glob(str(json_file_expression))]
+
+
+def merge_json_files(json_files: list[Path]):
+    url_info_dict = {}
+    for json_file in json_files:
+        with open(json_file, "r") as file:
+            url_info_dict_part = json.load(file)
+        url_info_dict_part_mutable = deepcopy(url_info_dict_part)
+
+        for channel_id, channel_dict in url_info_dict_part.items():
+            for playlist_id, playlist_dict in channel_dict["entries"].items():
+                if playlist_dict["title"] and not playlist_id:
+                    del url_info_dict_part_mutable[channel_id]["entries"][playlist_id]
+                    playlist_id = restrict_filename(playlist_dict["title"])
+                    playlist_dict["id"] = playlist_id
+                    url_info_dict_part_mutable[channel_id]["entries"][
+                        playlist_id
+                    ] = playlist_dict
+        merge(url_info_dict, url_info_dict_part_mutable)
+    return url_info_dict
 
 
 def download(url, filepath, verbose=True):

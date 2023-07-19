@@ -424,7 +424,7 @@ class YoutubeInfoExtractor:
                         "description": video_info["description"],
                         "duration": video_info["duration"],
                     }
-                    
+
                     playlist_dict["entries"][video_entry["id"]] = video_dict
 
                     self.seen_video_ids.add(video_entry["id"])
