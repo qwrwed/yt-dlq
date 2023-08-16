@@ -32,6 +32,7 @@ patch_extract_metadata_from_tabs()
 PATTERN_ID = r"[@\w\-]+"
 PATTERN_QUERY = r"(?:\?[\w=\&]+)"
 PATTERN_CHANNEL_BASE = (
+    # rf"https:\/\/(?:www\.|music\.)?youtube\.com(?:\/(?:c|channel|user))?\/{PATTERN_ID}"
     rf"https:\/\/(?:www\.)?youtube\.com(?:\/(?:c|channel|user))?\/{PATTERN_ID}"
 )
 
