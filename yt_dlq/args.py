@@ -115,7 +115,7 @@ def process_args():
     parser.add_argument(
         "-f",
         "--output-format",
-        choices=["mp3", "m4a"],
+        choices=["mp3", "m4a", "mkv"],
         default="m4a",
         help="Output audio file format",
     )

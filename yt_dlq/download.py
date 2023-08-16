@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from yt_dlp import YoutubeDL
+from yt_dlp.postprocessor import MetadataParserPP
 from yt_dlp.utils import DownloadError
 
 from yt_dlq.args import ProgramArgsNamespace
@@ -12,29 +13,36 @@ from yt_dlq.state import get_download_state, set_download_state
 from yt_dlq.types import DownloadStates
 from yt_dlq.utils import match_filter_func
 
+base_postprocessors = [
+    {"key": "FFmpegMetadata"},
+    {"key": "EmbedThumbnail"},
+]
+
+format_postprocessors = {
+    "mkv": [  # required for custom/arbitrary fields
+        {
+            "key": "MetadataParser",
+            "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
+        },
+        {
+            "key": "FFmpegVideoRemuxer",
+            "preferedformat": "mkv",
+        },
+    ],
+    "mp3": [
+        {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }
+    ],
+}
+
 
 def download_all(args: ProgramArgsNamespace, all_urls_dict):
-    postprocessors = [
-        # {
-        #     'key': 'FFmpegExtractAudio',
-        #     'preferredcodec': 'm4a',
-        # },
-        {"key": "FFmpegMetadata"},
-        # {
-        #     "key": "MetadataParser",
-        #     "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
-        # },
-        # { "key" : "FFmpegVideoRemuxer", "preferedformat" : "mkv", }, # required for custom/arbitrary fields
-        {"key": "EmbedThumbnail"},
-    ]
-    if args.output_format == "mp3":
-        postprocessors.append(
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": "192",
-            }
-        )
+    postprocessors = base_postprocessors + format_postprocessors.get(
+        args.output_format, []
+    )
     ydl_opts = {
         "verbose": args.verbose,
         "format": "m4a/bestaudio/best",
@@ -149,7 +157,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     remove_placeholder = False
                     if args.use_archives:
                         video_download_state = get_download_state(
-                            video, channel_playlist_info, channel_archive_filepath_json
+                            video, channel_playlist_info, channel_archive_filepath_json, args.output_format
                         )
                         match video_download_state:
                             case DownloadStates.NEVER_DOWNLOADED:
@@ -179,6 +187,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                         channel_playlist_info,
                                         channel_archive_filepath_json,
                                         DownloadStates.CREATED_PLACEHOLDER,
+                                        "txt",
                                     )
                                     continue
                                 else:
@@ -279,8 +288,6 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     if remove_placeholder:
                         os.remove(placeholder_path)
 
-                    # write_to_archives(video, archives_to_write)
-                    # write_entry_extended(video, channel_playlist_info, channel_archive_filepath_json)
                     if args.use_archives:
                         set_download_state(
                             video,
@@ -291,6 +298,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                 if is_duplicate
                                 else DownloadStates.ORIGINAL_DOWNLOADED
                             ),
+                            args.output_format,
                         )
     if failed_downloads:
         print(f"{len(failed_downloads)} failed downloads")
