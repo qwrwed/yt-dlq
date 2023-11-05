@@ -1,13 +1,12 @@
-import argparse
 from pathlib import Path
+
+from configargparse import ArgumentParser, Namespace
 
 from yt_dlq.file import generate_json_output_filename
 from yt_dlq.types import Url
 
 
-class ProgramArgsNamespace(
-    argparse.Namespace
-):  # pylint: disable=too-few-public-methods
+class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     url: Url
     batchfile: Path
     permit_single: bool
@@ -25,7 +24,8 @@ class ProgramArgsNamespace(
 
 
 def process_args():
-    parser = argparse.ArgumentParser()
+    parser = ArgumentParser()
+    parser.add_argument("-c","--config",is_config_file=True)
     chosen_url_group = parser.add_mutually_exclusive_group(required=True)
     chosen_url_group.add_argument(
         "-j",
