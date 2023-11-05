@@ -1,9 +1,17 @@
 from pathlib import Path
 
 from configargparse import ArgumentParser, Namespace
+from utils_python import get_platform
 
 from yt_dlq.file import generate_json_output_filename
 from yt_dlq.types import Url
+
+
+def get_default_config_file():
+    path = Path("config", get_platform()).with_suffix(".yml")
+    if path.is_file():
+        return path
+    return None
 
 
 class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
