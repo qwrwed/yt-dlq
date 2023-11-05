@@ -3,7 +3,7 @@ Filter a JSON url file based on strings to include/exclude
 """
 import argparse
 import json
-from copy import deepcopy
+from copy import copy, deepcopy
 from pathlib import Path
 from typing import Optional
 
@@ -67,6 +67,22 @@ def get_args():
     return parser.parse_args(namespace=ArgsNamespace)
 
 
+def remove_empties(urls_dict):
+    empty_channel_ids = set()
+    for channel_id, channel_dict in urls_dict.items():
+        # channel_playlists = set(channel_dict["entries"].keys())
+        empty_playlist_ids = set()
+        for playlist_id, playlist_dict in channel_dict["entries"].items():
+            if not playlist_dict["entries"]:
+                empty_playlist_ids.add(playlist_id)
+        for empty_playlist_id in empty_playlist_ids:
+            del channel_dict["entries"][empty_playlist_id]
+        if not channel_dict["entries"]:
+            empty_channel_ids.add(channel_id)
+    for empty_channel_id in empty_channel_ids:
+        del urls_dict[empty_channel_id]
+
+
 if __name__ == "__main__":
     args = get_args()
     input_filepath = args.input_file
@@ -112,7 +128,10 @@ if __name__ == "__main__":
                 ):
                     video_ids_with_duration_greater_than.add(video_id)
 
-                if args.duration_less_than and video_duration <= args.duration_less_than:
+                if (
+                    args.duration_less_than
+                    and video_duration <= args.duration_less_than
+                ):
                     video_ids_with_duration_less_than.add(video_id)
 
             video_ids_to_keep = set() | (
@@ -142,6 +161,7 @@ if __name__ == "__main__":
                 del urls_dict_remove[channel_id]["entries"][playlist_id]["entries"][
                     video_id
                 ]
+            remove_empties(urls_dict_remove)
             print()
 
             print(" REMOVING VIDEOS:")
@@ -151,12 +171,16 @@ if __name__ == "__main__":
                 del urls_dict_keep[channel_id]["entries"][playlist_id]["entries"][
                     video_id
                 ]
+            remove_empties(urls_dict_keep)
             print()
 
-    output_file_kept = add_stem_suffix(input_filepath, args.output_suffix)
-    with open(output_file_kept, "w+") as f:
-        json.dump(urls_dict_keep, f, indent=4)
-    print(f"wrote kept urls to {output_file_kept}")
+    if urls_dict_keep:
+        output_file_kept = add_stem_suffix(input_filepath, args.output_suffix)
+        with open(output_file_kept, "w+") as f:
+            json.dump(urls_dict_keep, f, indent=4)
+        print(f"wrote kept urls to {output_file_kept}")
+    else:
+        print("no urls to keep")
 
     if args.no_modify:
         output_file_removed = add_stem_suffix(
@@ -164,6 +188,14 @@ if __name__ == "__main__":
         )
     else:
         output_file_removed = input_filepath
-    with open(output_file_removed, "w+") as f:
-        json.dump(urls_dict_remove, f, indent=4)
-    print(f"wrote removed urls to {output_file_removed}")
+
+    if urls_dict_remove:
+        with open(output_file_removed, "w+") as f:
+            json.dump(urls_dict_remove, f, indent=4)
+        print(f"wrote removed urls to {output_file_removed}")
+    else:
+        if args.no_modify:
+            print("no urls to remove")
+        else:
+            print(f"no remaining urls. deleting {output_file_removed}")
+            output_file_removed.unlink()
