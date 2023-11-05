@@ -7,7 +7,7 @@ from yt_dlq.types import Url
 
 
 class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
-    url: Url
+    urls: list[Url]
     batchfile: Path
     permit_single: bool
     json_file: Path
@@ -46,10 +46,11 @@ def process_args():
         type=Path,
     )
     chosen_url_group.add_argument(
-        "url",
+        "urls",
         metavar="URL",
-        help="URL to download",
-        nargs="?",
+        help="URL(s) to download",
+        nargs="*",
+        default=None,
     )
 
     parser.add_argument(

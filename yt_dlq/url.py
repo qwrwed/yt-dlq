@@ -644,7 +644,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     if args.batchfile:
         urls_input_list = read_urls_from_file(args.batchfile)
     else:
-        urls_input_list = [args.url]
+        urls_input_list = args.urls
 
     yie = YoutubeInfoExtractor(args)
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
