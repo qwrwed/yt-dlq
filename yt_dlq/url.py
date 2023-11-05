@@ -285,7 +285,10 @@ class YoutubeInfoExtractor:
                 }
                 continue
             elif playlist_group_content_categories == {"video"}:
-                playlist_urls_resolved.add(playlist_group_url)
+                if playlist_group_info["id"].startswith("FL"):
+                    print(f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ ")
+                else:
+                    playlist_urls_resolved.add(playlist_group_url)
                 continue
             raise NotImplementedError
             ## only to be updated if able to reproduce issue:
