@@ -25,7 +25,7 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
 
 def process_args():
     parser = ArgumentParser()
-    parser.add_argument("-c","--config",is_config_file=True)
+    parser.add_argument("-c","--config-file",is_config_file=True)
     chosen_url_group = parser.add_mutually_exclusive_group(required=True)
     chosen_url_group.add_argument(
         "-j",
