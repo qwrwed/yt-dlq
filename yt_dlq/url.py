@@ -46,6 +46,10 @@ URL_CATEGORY_PATTERNS = {
 }
 
 PLAYLIST_OVERRIDE_DIR_NAME = "_playlists"
+# this is the "channel" which will contain playlists created using manual playlist override
+# it will create a folder with its name (good) but will also be used for the album artist (not good)
+# TODO: allow "album artist override" to change both, rename playlist-override to album-override
+# consider renaming "channel" title to "Various Artists" by default
 
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
