@@ -45,6 +45,7 @@ URL_CATEGORY_PATTERNS = {
     "video": rf"^(https:\/\/(?:youtu\.be\/|(?:www\.)?youtube\.com\/watch\?v=)({PATTERN_ID})){PATTERN_QUERY}?\/?$",
 }
 
+PLAYLIST_OVERRIDE_DIR_NAME = "_playlists"
 
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
@@ -352,6 +353,10 @@ class YoutubeInfoExtractor:
                     ch_id = ""
                     ch_title = ""
                     ch_url = ""
+                elif self.args.playlist_override:
+                    ch_id = PLAYLIST_OVERRIDE_DIR_NAME
+                    ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                    ch_url = ""
                 elif self.url_to_channel_id.get(playlist_url) is not None:
                     ch_id = self.url_to_channel_id[playlist_url]
                     ch_title = self.channel_id_to_channel_title.get(ch_id)
@@ -369,9 +374,14 @@ class YoutubeInfoExtractor:
                     )
 
                 # set playlist properties
-                pl_id = playlist_info["id"]
-                pl_title = playlist_info["title"]
-                pl_url = playlist_info["webpage_url"]
+                if self.args.playlist_override:
+                    pl_id = self.args.playlist_override
+                    pl_title = self.args.playlist_override
+                    pl_url = ""
+                else:
+                    pl_id = playlist_info["id"]
+                    pl_title = playlist_info["title"]
+                    pl_url = playlist_info["webpage_url"]
 
                 # create or load channel dict
                 if ch_id in self.url_info_dict:
@@ -453,15 +463,24 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
+            elif self.args.playlist_override:
+                ch_id = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_url = ""
             else:
                 ch_id = channel_videos_info["channel_id"]
                 ch_title = channel_videos_info["channel"]
                 ch_url = channel_videos_info["channel_url"]
 
             # set playlist properties
-            pl_id = ""
-            pl_title = ""
-            pl_url = ""
+            if self.args.playlist_override:
+                pl_id = self.args.playlist_override
+                pl_title = self.args.playlist_override
+                pl_url = ""
+            else:
+                pl_id = ""
+                pl_title = ""
+                pl_url = ""
 
             # create or load channel dict
             if ch_id in self.url_info_dict:
@@ -539,15 +558,24 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
+            elif self.args.playlist_override:
+                ch_id = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_url = ""
             else:
                 ch_id = video_info["channel_id"]
                 ch_title = video_info["channel"]
                 ch_url = video_info["channel_url"]
 
             # set playlist properties
-            pl_id = ""
-            pl_title = ""
-            pl_url = ""
+            if self.args.playlist_override:
+                pl_id = self.args.playlist_override
+                pl_title = self.args.playlist_override
+                pl_url = ""
+            else:
+                pl_id = ""
+                pl_title = ""
+                pl_url = ""
 
             # create or load channel dict
             if ch_id in self.url_info_dict:
@@ -619,8 +647,8 @@ class YoutubeInfoExtractor:
                     else:
                         continue
                     for video_info in playlist_info["entries"].values():
-                        video_info["music_info"][field_name] = field
-                    playlist_info["music_info"][field_name] = field
+                        video_info.setdefault("music_info", {})[field_name] = field
+                    playlist_info.setdefault("music_info", {})[field_name] = field
 
     def construct_url_info_dict(
         self,

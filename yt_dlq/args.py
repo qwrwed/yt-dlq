@@ -15,20 +15,21 @@ def get_default_config_file():
 
 
 class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
-    urls: list[Url]
-    batchfile: Path
+    urls: list[Url] | None
+    batchfile: Path | None
     permit_single: bool
-    json_file: Path
+    json_file: Path | None
     output_dir: Path
     playlist_duplicates: bool
     text_placeholders: bool
-    ffmpeg_location: Path
+    ffmpeg_location: Path | None
     use_archives: bool
     no_channels: bool
     data_only: bool
     output_format: str
     verbose: bool
-    json_file_prefix: str
+    json_file_prefix: str | None
+    playlist_override: str | None
 
 
 def process_args():
@@ -138,6 +139,10 @@ def process_args():
         "-s",
         "--json-file-prefix",
         help="Prefix for output JSON file name.",
+    )
+    parser.add_argument(
+        "--playlist-override",
+        help="Set playlist and subfolder manually",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())
