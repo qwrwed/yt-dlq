@@ -5,10 +5,10 @@ from utils_python import get_platform
 
 from yt_dlq.file import generate_json_output_filename
 from yt_dlq.types import Url
-
+from yt_dlq.utils import get_path
 
 def get_default_config_file():
-    path = Path("config", get_platform()).with_suffix(".yml")
+    path = get_path(Path("config", get_platform()).with_suffix(".yml"))
     if path.is_file():
         return path
     return None
@@ -34,7 +34,12 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
 
 def process_args():
     parser = ArgumentParser()
-    parser.add_argument("-c","--config-file",is_config_file=True)
+    parser.add_argument(
+        "-c",
+        "--config-file",
+        is_config_file=True,
+        default=get_default_config_file(),
+    )
     chosen_url_group = parser.add_mutually_exclusive_group(required=True)
     chosen_url_group.add_argument(
         "-j",
