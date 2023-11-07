@@ -45,11 +45,10 @@ URL_CATEGORY_PATTERNS = {
     "video": rf"^(https:\/\/(?:youtu\.be\/|(?:www\.)?youtube\.com\/watch\?v=)({PATTERN_ID})){PATTERN_QUERY}?\/?$",
 }
 
-PLAYLIST_OVERRIDE_DIR_NAME = "_playlists"
-# this is the "channel" which will contain playlists created using manual playlist override
-# it will create a folder with its name (good) but will also be used for the album artist (not good)
-# TODO: allow "album artist override" to change both, rename playlist-override to album-override
-# consider renaming "channel" title to "Various Artists" by default
+DEFAULT_ALBUM_ARTIST_OVERRIDE_ID = "_playlists"
+DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE = "Various Artists"
+# this is the default "channel"/album artist which will
+#   contain albums created using album override
 
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
@@ -362,8 +361,8 @@ class YoutubeInfoExtractor:
                     ch_title = self.args.albumartist_override
                     ch_url = ""
                 elif self.args.album_override:
-                    ch_id = PLAYLIST_OVERRIDE_DIR_NAME
-                    ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                    ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+                    ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
                     ch_url = ""
                 elif self.url_to_channel_id.get(playlist_url) is not None:
                     ch_id = self.url_to_channel_id[playlist_url]
@@ -476,8 +475,8 @@ class YoutubeInfoExtractor:
                 ch_title = self.args.albumartist_override
                 ch_url = ""
             elif self.args.album_override:
-                ch_id = PLAYLIST_OVERRIDE_DIR_NAME
-                ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+                ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
                 ch_url = ""
             else:
                 ch_id = channel_videos_info["channel_id"]
@@ -575,8 +574,8 @@ class YoutubeInfoExtractor:
                 ch_title = self.args.albumartist_override
                 ch_url = ""
             elif self.args.album_override:
-                ch_id = PLAYLIST_OVERRIDE_DIR_NAME
-                ch_title = PLAYLIST_OVERRIDE_DIR_NAME
+                ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+                ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
                 ch_url = ""
             else:
                 ch_id = video_info["channel_id"]
