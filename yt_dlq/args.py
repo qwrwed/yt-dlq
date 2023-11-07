@@ -30,6 +30,7 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     verbose: bool
     json_file_prefix: str | None
     album_override: str | None
+    albumartist_override: str | None
 
 
 def process_args():
@@ -148,6 +149,11 @@ def process_args():
     parser.add_argument(
         "--album-override",
         help="Set album/subfolder manually",
+    )
+
+    parser.add_argument(
+        "--albumartist-override",
+        help="Set album artist/parent folder manually",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())

@@ -357,6 +357,10 @@ class YoutubeInfoExtractor:
                     ch_id = ""
                     ch_title = ""
                     ch_url = ""
+                elif self.args.albumartist_override:
+                    ch_id = self.args.albumartist_override
+                    ch_title = self.args.albumartist_override
+                    ch_url = ""
                 elif self.args.album_override:
                     ch_id = PLAYLIST_OVERRIDE_DIR_NAME
                     ch_title = PLAYLIST_OVERRIDE_DIR_NAME
@@ -467,6 +471,10 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
+            elif self.args.albumartist_override:
+                ch_id = self.args.albumartist_override
+                ch_title = self.args.albumartist_override
+                ch_url = ""
             elif self.args.album_override:
                 ch_id = PLAYLIST_OVERRIDE_DIR_NAME
                 ch_title = PLAYLIST_OVERRIDE_DIR_NAME
@@ -561,6 +569,10 @@ class YoutubeInfoExtractor:
             if self.args.no_channels:
                 ch_id = ""
                 ch_title = ""
+                ch_url = ""
+            elif self.args.albumartist_override:
+                ch_id = self.args.albumartist_override
+                ch_title = self.args.albumartist_override
                 ch_url = ""
             elif self.args.album_override:
                 ch_id = PLAYLIST_OVERRIDE_DIR_NAME
