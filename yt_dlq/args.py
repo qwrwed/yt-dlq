@@ -29,7 +29,7 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     output_format: str
     verbose: bool
     json_file_prefix: str | None
-    playlist_override: str | None
+    album_override: str | None
 
 
 def process_args():
@@ -146,8 +146,8 @@ def process_args():
         help="Prefix for output JSON file name.",
     )
     parser.add_argument(
-        "--playlist-override",
-        help="Set playlist and subfolder manually",
+        "--album-override",
+        help="Set album/subfolder manually",
     )
 
     parsed = parser.parse_args(namespace=ProgramArgsNamespace())

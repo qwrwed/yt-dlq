@@ -357,7 +357,7 @@ class YoutubeInfoExtractor:
                     ch_id = ""
                     ch_title = ""
                     ch_url = ""
-                elif self.args.playlist_override:
+                elif self.args.album_override:
                     ch_id = PLAYLIST_OVERRIDE_DIR_NAME
                     ch_title = PLAYLIST_OVERRIDE_DIR_NAME
                     ch_url = ""
@@ -378,9 +378,9 @@ class YoutubeInfoExtractor:
                     )
 
                 # set playlist properties
-                if self.args.playlist_override:
-                    pl_id = self.args.playlist_override
-                    pl_title = self.args.playlist_override
+                if self.args.album_override:
+                    pl_id = self.args.album_override
+                    pl_title = self.args.album_override
                     pl_url = ""
                 else:
                     pl_id = playlist_info["id"]
@@ -467,7 +467,7 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
-            elif self.args.playlist_override:
+            elif self.args.album_override:
                 ch_id = PLAYLIST_OVERRIDE_DIR_NAME
                 ch_title = PLAYLIST_OVERRIDE_DIR_NAME
                 ch_url = ""
@@ -477,9 +477,9 @@ class YoutubeInfoExtractor:
                 ch_url = channel_videos_info["channel_url"]
 
             # set playlist properties
-            if self.args.playlist_override:
-                pl_id = self.args.playlist_override
-                pl_title = self.args.playlist_override
+            if self.args.album_override:
+                pl_id = self.args.album_override
+                pl_title = self.args.album_override
                 pl_url = ""
             else:
                 pl_id = ""
@@ -562,7 +562,7 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
-            elif self.args.playlist_override:
+            elif self.args.album_override:
                 ch_id = PLAYLIST_OVERRIDE_DIR_NAME
                 ch_title = PLAYLIST_OVERRIDE_DIR_NAME
                 ch_url = ""
@@ -572,9 +572,9 @@ class YoutubeInfoExtractor:
                 ch_url = video_info["channel_url"]
 
             # set playlist properties
-            if self.args.playlist_override:
-                pl_id = self.args.playlist_override
-                pl_title = self.args.playlist_override
+            if self.args.album_override:
+                pl_id = self.args.album_override
+                pl_title = self.args.album_override
                 pl_url = ""
             else:
                 pl_id = ""
