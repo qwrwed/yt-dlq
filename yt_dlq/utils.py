@@ -1,6 +1,6 @@
-from collections.abc import Mapping
 import logging
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from types import TracebackType
 from typing import Type
