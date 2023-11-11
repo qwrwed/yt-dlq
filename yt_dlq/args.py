@@ -65,7 +65,7 @@ def process_args():
         metavar="URL",
         help="URL(s) to download",
         nargs="*",
-        default=None,
+        default=[],
     )
 
     parser.add_argument(
