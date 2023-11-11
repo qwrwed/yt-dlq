@@ -53,6 +53,7 @@ DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE = "Various Artists"
 # this is the default "channel"/album artist which will
 #   contain albums created using album override
 
+
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
         rawlines = file.readlines()
@@ -294,7 +295,9 @@ class YoutubeInfoExtractor:
                 continue
             elif playlist_group_content_categories == {"video"}:
                 if playlist_group_info["id"].startswith("FL"):
-                    LOGGER.info(f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ ")
+                    LOGGER.info(
+                        f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ "
+                    )
                 else:
                     playlist_urls_resolved.add(playlist_group_url)
                 continue

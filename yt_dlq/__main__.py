@@ -10,6 +10,7 @@ from yt_dlq.utils import YtdlqLogger, get_logger_with_class
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
+
 def main():
     args = process_args()
     setup_config_logging(args.logging_config_path)

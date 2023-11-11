@@ -17,6 +17,7 @@ from yt_dlq.utils import YtdlqLogger, get_logger_with_class
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
+
 def make_parent_dir(filepath):
     Path(filepath).parent.mkdir(exist_ok=True, parents=True)
 

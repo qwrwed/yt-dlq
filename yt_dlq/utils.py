@@ -7,6 +7,7 @@ from typing import Type
 
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
+
 def get_resolve_filepath(file_path: Path | str, root: Path | str = ROOT_PROJECT_DIR):
     if not isinstance(file_path, Path):
         file_path = Path(file_path)
@@ -30,12 +31,14 @@ def set_resolve_filepath(file_path: Path, root: Path = ROOT_PROJECT_DIR):
         file_path,
     )
 
+
 if True:
     get_path = get_resolve_filepath  # resolve paths from project_root_directory
     set_path = set_resolve_filepath
 else:
     get_path = Path  # resolve paths from current working directory
     set_path = Path
+
 
 def escape_spaces(arg, use_singlequote=False):
     quote = "'" if use_singlequote else "'"
@@ -60,19 +63,24 @@ def hyphenate_date(YYYYMMDD: str):
         raise ValueError(f"date {YYYYMMDD} not recognised")
     return "-".join(match.groups())
 
+
 class YtdlqLogger(logging.Logger):
     def debug(
         self,
         msg: object,
         *args: object,
-        exc_info: None | bool | tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None] | BaseException = None,
+        exc_info: None
+        | bool
+        | tuple[type[BaseException], BaseException, TracebackType | None]
+        | tuple[None, None, None]
+        | BaseException = None,
         stack_info: bool = False,
         stacklevel: int = 1,
-        extra: Mapping[str, object] | None = None
+        extra: Mapping[str, object] | None = None,
     ) -> None:
         # re-calling logging functions adds another level to the stack, so we must
         #  negate that by passing stacklevel: https://stackoverflow.com/a/59492341
-        YTDLP_STACK_OFFSET=3
+        YTDLP_STACK_OFFSET = 3
 
         # https://github.com/yt-dlp/yt-dlp#adding-logger-and-progress-hook
         # yt-dlp logs "info" as "debug"
@@ -81,11 +89,35 @@ class YtdlqLogger(logging.Logger):
         # then assume any such message apart from `[debug]` should be info
         if msg.startswith("["):
             if msg.startswith("[debug]"):
-                return super().debug(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+YTDLP_STACK_OFFSET, extra=extra)
-            return super().info(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+YTDLP_STACK_OFFSET, extra=extra)
-        return super().debug(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+1, extra=extra)
+                return super().debug(
+                    msg,
+                    *args,
+                    exc_info=exc_info,
+                    stack_info=stack_info,
+                    stacklevel=stacklevel + YTDLP_STACK_OFFSET,
+                    extra=extra,
+                )
+            return super().info(
+                msg,
+                *args,
+                exc_info=exc_info,
+                stack_info=stack_info,
+                stacklevel=stacklevel + YTDLP_STACK_OFFSET,
+                extra=extra,
+            )
+        return super().debug(
+            msg,
+            *args,
+            exc_info=exc_info,
+            stack_info=stack_info,
+            stacklevel=stacklevel + 1,
+            extra=extra,
+        )
 
-def get_logger_with_class(name: str | None = None, klass: Type[logging.Logger] | None = None):
+
+def get_logger_with_class(
+    name: str | None = None, klass: Type[logging.Logger] | None = None
+):
     if klass is not None:
         logging.setLoggerClass(klass)
     return logging.getLogger(name)

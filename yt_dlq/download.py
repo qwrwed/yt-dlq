@@ -156,16 +156,23 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     remove_placeholder = False
                     if args.use_archives:
                         video_download_state = get_download_state(
-                            video, channel_playlist_info, channel_archive_filepath_json, args.output_format
+                            video,
+                            channel_playlist_info,
+                            channel_archive_filepath_json,
+                            args.output_format,
                         )
                         match video_download_state:
                             case DownloadStates.NEVER_DOWNLOADED:
                                 is_duplicate = False
                             case DownloadStates.ORIGINAL_DOWNLOADED:
-                                LOGGER.info(log_string + " - ALREADY DOWNLOADED IN PLAYLIST")
+                                LOGGER.info(
+                                    log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
+                                )
                                 continue
                             case DownloadStates.DUPLICATE_DOWNLOADED:
-                                LOGGER.info(log_string + " - ALREADY DOWNLOADED IN PLAYLIST")
+                                LOGGER.info(
+                                    log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
+                                )
                                 continue
                             case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
                                 log_string += " - DOWNLOADED IN ANOTHER PLAYLIST"
@@ -176,7 +183,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                     channel_playlist_info["playlist_type"] == "release"
                                 ):
                                     is_duplicate = True
-                                    LOGGER.info(log_string + " (DUPLICATES ALLOWED IN RELEASES)")
+                                    LOGGER.info(
+                                        log_string + " (DUPLICATES ALLOWED IN RELEASES)"
+                                    )
                                 elif args.text_placeholders:
                                     LOGGER.info(log_string + " - CREATING PLACEHOLDER")
                                     make_parent_dir(placeholder_path)
@@ -194,15 +203,22 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                     continue
                             case DownloadStates.CREATED_PLACEHOLDER:
                                 if args.playlist_duplicates:
-                                    LOGGER.info(log_string + " - OVERWRITING PLACEHOLDER")
+                                    LOGGER.info(
+                                        log_string + " - OVERWRITING PLACEHOLDER"
+                                    )
                                     remove_placeholder = True
                                     is_duplicate = True
                                 else:
-                                    LOGGER.info(log_string + " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
+                                    LOGGER.info(
+                                        log_string
+                                        + " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING"
+                                    )
                                     continue
                             case _:
                                 # input()
-                                raise RuntimeError(f"Unhandled download state: {repr(video_download_state)}")
+                                raise RuntimeError(
+                                    f"Unhandled download state: {repr(video_download_state)}"
+                                )
                     else:
                         video_download_state = DownloadStates.NEVER_DOWNLOADED
 
