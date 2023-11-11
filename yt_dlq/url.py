@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import json
+import logging
 import re
 import sys
 from datetime import datetime
@@ -18,12 +19,14 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import generate_json_output_filename, make_parent_dir
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES
-from yt_dlq.utils import hyphenate_date
+from yt_dlq.utils import YtdlqLogger, get_logger_with_class, hyphenate_date
 
 if TYPE_CHECKING:
     from typing import Iterable
 
     from yt_dlq.types import Url, UrlCategoryDict, UrlList
+
+LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
 pprint = partial(pprint, sort_dicts=False)
 patch_extract_metadata_from_tabs()
@@ -88,7 +91,7 @@ def categorise_urls(url_list: UrlList) -> UrlCategoryDict:
             known_urls.append(url)
             known_urls.append(url_categorised)
         else:
-            print(f"URL format not recognised: {url!r}")
+            LOGGER.warning(f"URL format not recognised: {url!r}")
             unknown_urls.append(url)
         url_dict_categorised[url_category].append(url_categorised)
     del url_dict_categorised[None]
@@ -110,13 +113,13 @@ def retrieve_info(
         progress = f"{remaining} remaining"
     else:
         progress = f"{counter[0]}/{counter[1]}"
-    # print(f"RETRIEVING INFO: {category} {progress} {url!r}")
+    # LOGGER.info(f"RETRIEVING INFO: {category} {progress} {url!r}")
     try:
         info = ydl.extract_info(url, download=False)
     except Exception as exc:
         breakpoint()
         pass
-    print(f"RETRIEVED INFO: {category} {progress} {url!r} | {info_func(info)}")
+    LOGGER.info(f"RETRIEVED INFO: {category} {progress} {url!r} | {info_func(info)}")
     return info
 
 
@@ -138,10 +141,11 @@ def resolve_recursive_playlist_group(
         playlist_subgroup_url_fixed = playlist_subgroup_urls_fixed[
             playlist_subgroup_url
         ]
-        print(f"URL resolved using {playlist_group_urls_fixed_path}")
+        LOGGER.info(f"URL resolved using {playlist_group_urls_fixed_path}")
     else:
-        print("ERROR: Youtube served us a broken URL.")
-        print(
+        # TODO: distinguish between interactive and non-interactive?
+        LOGGER.info("ERROR: Youtube served us a broken URL.")
+        LOGGER.info(
             f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_subgroup_title!r}"
         )
         playlist_subgroup_url_fixed = input("  Paste the resulting URL here: ")
@@ -278,7 +282,7 @@ class YoutubeInfoExtractor:
                 counter=(i + 1, len(urls_group_playlist)),
             )
             playlist_group_contents_unresolved = playlist_group_info["entries"]
-            # pprint(playlist_group_contents_unresolved)
+            # LOGGER.info(pformat(playlist_group_contents_unresolved))
             playlist_group_content_categories = {
                 get_url_category(entry["url"])[0]
                 for entry in playlist_group_contents_unresolved
@@ -290,7 +294,7 @@ class YoutubeInfoExtractor:
                 continue
             elif playlist_group_content_categories == {"video"}:
                 if playlist_group_info["id"].startswith("FL"):
-                    print(f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ ")
+                    LOGGER.info(f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ ")
                 else:
                     playlist_urls_resolved.add(playlist_group_url)
                 continue
@@ -299,7 +303,7 @@ class YoutubeInfoExtractor:
             # for i, playlist_subgroup_entry in enumerate(
             #     playlist_group_contents_unresolved
             # ):
-            #     # pprint(playlist_subgroup_entry)
+            #     # LOGGER.info(pformat(playlist_subgroup_entry))
             #     playlist_subgroup_title = playlist_subgroup_entry["title"]
             #     playlist_subgroup_url = playlist_subgroup_entry["url"]
             #     while True:
@@ -345,7 +349,7 @@ class YoutubeInfoExtractor:
             playlist_urls = urls_input[playlist_category]
             for i, playlist_url in enumerate(playlist_urls):
                 # get info from downloader
-                print(
+                LOGGER.info(
                     f"RETRIEVING INFO: {playlist_category} {i+1}/{len(playlist_urls)} {playlist_url!r}"
                 )
                 playlist_info = self.ydl.extract_info(playlist_url, download=False)
@@ -422,7 +426,7 @@ class YoutubeInfoExtractor:
                         and video_entry["id"] in self.seen_video_ids
                     ):
                         continue
-                    print(
+                    LOGGER.info(
                         f" RETRIEVING INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r}"
                     )
                     try:
@@ -457,7 +461,7 @@ class YoutubeInfoExtractor:
         channel_videos_urls = urls_input["channel_videos"]
         for i, channel_videos_url in enumerate(channel_videos_urls):
             # get info from downloader
-            print(
+            LOGGER.info(
                 f"RETRIEVING INFO: channel {i+1}/{len(channel_videos_urls)} {channel_videos_url!r}"
             )
             channel_videos_info = self.ydl.extract_info(
@@ -525,7 +529,7 @@ class YoutubeInfoExtractor:
             for idx, video_entry in enumerate(channel_videos_entries):
                 if video_entry["id"] in self.seen_video_ids:
                     continue
-                print(
+                LOGGER.info(
                     f" RETRIEVING INFO: channel video {idx+1}/{len(channel_videos_entries)} {video_entry['url']!r}"
                 )
                 try:
@@ -554,7 +558,7 @@ class YoutubeInfoExtractor:
         video_urls = urls_input["video"]
         for i, video_url in enumerate(video_urls):
             # get info from downloader
-            print(f"RETRIEVING INFO: video {i+1}/{len(video_urls)} {video_url!r}")
+            LOGGER.info(f"RETRIEVING INFO: video {i+1}/{len(video_urls)} {video_url!r}")
             try:
                 video_info = self.ydl.extract_info(video_url, download=False)
             except DownloadError as exc:
@@ -652,7 +656,7 @@ class YoutubeInfoExtractor:
                     fields_set = set(fields_debug.values())
                     if len(fields_set) > 1:
                         field = max(fields_set, key=fields_list.count)
-                        print(
+                        LOGGER.warning(
                             f"Got conflicting {field_name!r}: {fields_set}. choosing most common: {field}"
                         )
                     elif len(fields_set) == 1:
@@ -707,7 +711,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
 def show_retrieved_urls_filepath(json_output_filepath, args):
     if not json_output_filepath:
         return
-    print(
+    LOGGER.info(
         "\nTo skip URL retrieval next time, run:\n"
-        f"python {sys.argv[0]} -j {str(json_output_filepath)!r} -o {args.output_dir}\n"
+        f"yt-dlq -j {str(json_output_filepath)!r} -o {args.output_dir}\n"
     )

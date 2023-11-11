@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import time
@@ -11,7 +12,9 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import make_parent_dir, restrict_filename
 from yt_dlq.state import get_download_state, set_download_state
 from yt_dlq.types import DownloadStates
-from yt_dlq.utils import match_filter_func
+from yt_dlq.utils import YtdlqLogger, get_logger_with_class, match_filter_func
+
+LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
 base_postprocessors = [
     {"key": "FFmpegMetadata"},
@@ -44,6 +47,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         args.output_format, []
     )
     ydl_opts = {
+        "logger": LOGGER,
+        "color": "never",
         "verbose": args.verbose,
         "format": "m4a/bestaudio/best",
         "postprocessors": postprocessors,
@@ -77,22 +82,19 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             channel_archive_filepath_json = Path(
                 channel_dir, channel_archive_filename_json
             )
-            print(
+            LOGGER.info(
                 f"DOWNLOADING CHANNEL {ch_idx+1}/{len(channels)}: {channel['title']!r}"
             )
             playlists = channel["entries"]
             for pl_idx, (playlist_id, playlist) in enumerate(playlists.items()):
-                print(
-                    f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}:",
-                    end=" ",
-                )
+                log_string = f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}:"
                 archives_to_write = [channel_archive_filepath]
                 ppa = [
                     "-metadata",
                     f"album_artist={channel['title']}",
                 ]
                 if playlist["title"]:
-                    print(f"{playlist['title']!r}")
+                    LOGGER.info(log_string + f"{playlist['title']!r}")
                     album_name = (playlist.get("music_info") or {}).get(
                         "album"
                     ) or playlist["title"]
@@ -123,7 +125,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     # archive_filename = playlist_archive_filename
                     # archive_filepath = playlist_archive_filepath
                 else:
-                    print(f"[loose videos] {channel['title']!r}")
+                    LOGGER.info(log_string + f"[loose videos] {channel['title']!r}")
                     ppa += [
                         "-metadata",
                         # f"album={channel['title']}",
@@ -147,12 +149,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         f"{restrict_filename(video['title'])}[{video_id}].{args.output_format}",
                     )
                     placeholder_path = expected_path.with_suffix(".txt")
-                    print(
-                        f"  DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}",
-                        end="",
-                    )
+                    log_string = f"  DOWNLOADING VIDEO {video_index+1}/{len(videos)}: {video['title']!r}"
                     if video["title"] == "[Private video]":
-                        print(" - UNAVAILABLE; SKIPPING")
+                        LOGGER.info(log_string + " - UNAVAILABLE; SKIPPING")
                         continue
                     remove_placeholder = False
                     if args.use_archives:
@@ -163,23 +162,23 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             case DownloadStates.NEVER_DOWNLOADED:
                                 is_duplicate = False
                             case DownloadStates.ORIGINAL_DOWNLOADED:
-                                print(" - ALREADY DOWNLOADED IN PLAYLIST")
+                                LOGGER.info(log_string + " - ALREADY DOWNLOADED IN PLAYLIST")
                                 continue
                             case DownloadStates.DUPLICATE_DOWNLOADED:
-                                print(" - ALREADY DOWNLOADED IN PLAYLIST")
+                                LOGGER.info(log_string + " - ALREADY DOWNLOADED IN PLAYLIST")
                                 continue
                             case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
-                                print(" - DOWNLOADED IN ANOTHER PLAYLIST", end="")
+                                log_string += " - DOWNLOADED IN ANOTHER PLAYLIST"
                                 if args.playlist_duplicates:
                                     is_duplicate = True
-                                    print(" (DUPLICATES ENABLED)")
+                                    LOGGER.info(log_string + " (DUPLICATES ENABLED)")
                                 elif (
                                     channel_playlist_info["playlist_type"] == "release"
                                 ):
                                     is_duplicate = True
-                                    print(" (DUPLICATES ALLOWED IN RELEASES)")
+                                    LOGGER.info(log_string + " (DUPLICATES ALLOWED IN RELEASES)")
                                 elif args.text_placeholders:
-                                    print(" - CREATING PLACEHOLDER")
+                                    LOGGER.info(log_string + " - CREATING PLACEHOLDER")
                                     make_parent_dir(placeholder_path)
                                     open(placeholder_path, "w+").close()
                                     set_download_state(
@@ -191,24 +190,19 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                     )
                                     continue
                                 else:
-                                    print(" - SKIPPING")
+                                    LOGGER.info(log_string + " - SKIPPING")
                                     continue
                             case DownloadStates.CREATED_PLACEHOLDER:
                                 if args.playlist_duplicates:
-                                    print(" - OVERWRITING PLACEHOLDER")
+                                    LOGGER.info(log_string + " - OVERWRITING PLACEHOLDER")
                                     remove_placeholder = True
                                     is_duplicate = True
                                 else:
-                                    print(
-                                        " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING"
-                                    )
+                                    LOGGER.info(log_string + " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING")
                                     continue
                             case _:
-                                print(
-                                    "Unhandled download state",
-                                    repr(video_download_state),
-                                )
-                                input()
+                                # input()
+                                raise RuntimeError(f"Unhandled download state: {repr(video_download_state)}")
                     else:
                         video_download_state = DownloadStates.NEVER_DOWNLOADED
 
@@ -250,7 +244,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             ):
                                 break
                             elif "ffmpeg not found" in exc.msg:
-                                print(
+                                LOGGER.info(
                                     "  Install by running 'python download_ffmpeg.py'"
                                 )
                                 exit()
@@ -260,7 +254,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         except PermissionError as exc:
                             if tries >= 5:
                                 raise
-                            print(exc)
+                            LOGGER.warning(exc)
                             time.sleep(5)
                             continue
                         except Exception as exc:
@@ -273,12 +267,12 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     # try:
                     #     retcode =
                     # except DownloadError as exc:
-                    #     # print("****************************")
-                    #     # print(exc)
+                    #     # LOGGER.info("****************************")
+                    #     # LOGGER.info(exc)
                     #     # breakpoint()
                     #     raise
                     #     # if "blocked" in exc.msg:
-                    #     #     # print(f"DOWNLOAD FAILED: {exc.msg}", )
+                    #     #     # LOGGER.info(f"DOWNLOAD FAILED: {exc.msg}", )
                     #     #     failed_downloads.append(video)
                     #     # else:
                     #     #     breakpoint()
@@ -301,5 +295,4 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             args.output_format,
                         )
     if failed_downloads:
-        print(f"{len(failed_downloads)} failed downloads")
-        breakpoint()
+        raise RuntimeError(f"{len(failed_downloads)} failed downloads")

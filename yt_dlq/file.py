@@ -1,5 +1,6 @@
 import functools
 import json
+import logging
 import shutil
 import zipfile
 from copy import deepcopy
@@ -12,6 +13,9 @@ import requests
 from mergedeep import merge
 from tqdm.auto import tqdm
 
+from yt_dlq.utils import YtdlqLogger, get_logger_with_class
+
+LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
 def make_parent_dir(filepath):
     Path(filepath).parent.mkdir(exist_ok=True, parents=True)
@@ -74,7 +78,7 @@ def download(url, filepath, verbose=True):
     # https://stackoverflow.com/a/63831344
 
     if verbose:
-        print(f"Downloading {url} to {filepath}")
+        LOGGER.info(f"Downloading {url} to {filepath}")
 
     r = requests.get(url, stream=True, allow_redirects=True)
     if r.status_code != 200:

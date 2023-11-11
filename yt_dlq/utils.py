@@ -1,5 +1,9 @@
+from collections.abc import Mapping
+import logging
 import re
 from pathlib import Path
+from types import TracebackType
+from typing import Type
 
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
@@ -55,3 +59,33 @@ def hyphenate_date(YYYYMMDD: str):
     if not match:
         raise ValueError(f"date {YYYYMMDD} not recognised")
     return "-".join(match.groups())
+
+class YtdlqLogger(logging.Logger):
+    def debug(
+        self,
+        msg: object,
+        *args: object,
+        exc_info: None | bool | tuple[type[BaseException], BaseException, TracebackType | None] | tuple[None, None, None] | BaseException = None,
+        stack_info: bool = False,
+        stacklevel: int = 1,
+        extra: Mapping[str, object] | None = None
+    ) -> None:
+        # re-calling logging functions adds another level to the stack, so we must
+        #  negate that by passing stacklevel: https://stackoverflow.com/a/59492341
+        YTDLP_STACK_OFFSET=3
+
+        # https://github.com/yt-dlp/yt-dlp#adding-logger-and-progress-hook
+        # yt-dlp logs "info" as "debug"
+        # debug messages start with [debug], but info messages do not start with [info]
+        # as a workaround, assume log message starting with "["" was logged by yt-dlp
+        # then assume any such message apart from `[debug]` should be info
+        if msg.startswith("["):
+            if msg.startswith("[debug]"):
+                return super().debug(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+YTDLP_STACK_OFFSET, extra=extra)
+            return super().info(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+YTDLP_STACK_OFFSET, extra=extra)
+        return super().debug(msg, *args, exc_info=exc_info, stack_info=stack_info, stacklevel=stacklevel+1, extra=extra)
+
+def get_logger_with_class(name: str | None = None, klass: Type[logging.Logger] | None = None):
+    if klass is not None:
+        logging.setLoggerClass(klass)
+    return logging.getLogger(name)

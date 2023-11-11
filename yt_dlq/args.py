@@ -1,20 +1,28 @@
 from pathlib import Path
+from pprint import pprint
 
 from configargparse import ArgumentParser, Namespace
 from utils_python import get_platform
 
 from yt_dlq.file import generate_json_output_filename
 from yt_dlq.types import Url
-from yt_dlq.utils import get_path
+from yt_dlq.utils import YtdlqLogger, get_logger_with_class, get_path
 
-def get_default_config_file():
-    path = get_path(Path("config", get_platform()).with_suffix(".yml"))
+LOGGER = get_logger_with_class(__name__, YtdlqLogger)
+
+
+def get_default_config_file(prefix="", suffix="", extension="yml", config_dir="config"):
+    if extension.startswith("."):
+        extension = extension[1:]
+    path = get_path(Path(config_dir, f"{prefix}{get_platform()}{suffix}.{extension}"))
     if path.is_file():
         return path
     return None
 
 
 class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
+    _app_config_path: Path | None
+    logging_config_path: Path | None
     urls: list[Url] | None
     batchfile: Path | None
     permit_single: bool
@@ -31,15 +39,26 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     json_file_prefix: str | None
     album_override: str | None
     albumartist_override: str | None
+    show_args_only: bool
 
 
 def process_args():
     parser = ArgumentParser()
     parser.add_argument(
         "-c",
-        "--config-file",
+        "--app-config-path",
         is_config_file=True,
-        default=get_default_config_file(),
+        dest="_app_config_path",
+        type=get_path,
+        default=get_default_config_file(prefix="app_", extension="yml"),
+        help="Path to app config file (default: '%(default)s')",
+    )
+    parser.add_argument(
+        "-l",
+        "--logging-config-path",
+        type=get_path,
+        default=get_default_config_file(prefix="logging_", extension="cfg"),
+        help="Path to logging config file (default: '%(default)s')",
     )
     chosen_url_group = parser.add_mutually_exclusive_group(required=True)
     chosen_url_group.add_argument(
@@ -156,5 +175,16 @@ def process_args():
         help="Set album artist/parent folder manually",
     )
 
-    parsed = parser.parse_args(namespace=ProgramArgsNamespace())
+    parser.add_argument(
+        "--show-args-only",
+        action="store_true",
+        help="Print args to stdout, then exit",
+    )
+
+    parsed: ProgramArgsNamespace = parser.parse_args(namespace=ProgramArgsNamespace())
+
+    if parsed.show_args_only:
+        pprint(parsed.__dict__)
+        exit()
+
     return parsed
