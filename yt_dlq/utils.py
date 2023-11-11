@@ -113,11 +113,3 @@ class YtdlqLogger(logging.Logger):
             stacklevel=stacklevel + 1,
             extra=extra,
         )
-
-
-def get_logger_with_class(
-    name: str | None = None, klass: Type[logging.Logger] | None = None
-):
-    if klass is not None:
-        logging.setLoggerClass(klass)
-    return logging.getLogger(name)

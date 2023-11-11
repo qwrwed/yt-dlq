@@ -12,6 +12,7 @@ from pprint import pprint
 from typing import TYPE_CHECKING, Callable, Optional
 
 from prettyprinter import cpprint
+from utils_python import get_logger_with_class
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, int_or_none
 
@@ -19,7 +20,7 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import generate_json_output_filename, make_parent_dir
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES
-from yt_dlq.utils import YtdlqLogger, get_logger_with_class, hyphenate_date
+from yt_dlq.utils import YtdlqLogger, hyphenate_date
 
 if TYPE_CHECKING:
     from typing import Iterable
@@ -171,12 +172,11 @@ def sort_playlist_groups(playlist_groups_resolved):
 class YoutubeInfoExtractor:
     def __init__(self, args: ProgramArgsNamespace) -> None:
         self.args = args
-        self.ydl = YoutubeDL(
-            params={
-                "extract_flat": True,
-                "quiet": True,
-            }
-        )
+        ydl_opts = {
+            "extract_flat": True,
+            "quiet": True,
+        }
+        self.ydl = YoutubeDL(params=ydl_opts)
         self.url_to_channel_id = {}
         self.channel_id_to_channel_title = {}
         self.url_info_dict = {}

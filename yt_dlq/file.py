@@ -12,8 +12,9 @@ from typing import Optional
 import requests
 from mergedeep import merge
 from tqdm.auto import tqdm
+from utils_python import get_logger_with_class
 
-from yt_dlq.utils import YtdlqLogger, get_logger_with_class
+from yt_dlq.utils import YtdlqLogger
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 

@@ -4,6 +4,7 @@ import re
 import time
 from pathlib import Path
 
+from utils_python import get_logger_with_class
 from yt_dlp import YoutubeDL
 from yt_dlp.postprocessor import MetadataParserPP
 from yt_dlp.utils import DownloadError
@@ -12,7 +13,7 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import make_parent_dir, restrict_filename
 from yt_dlq.state import get_download_state, set_download_state
 from yt_dlq.types import DownloadStates
-from yt_dlq.utils import YtdlqLogger, get_logger_with_class, match_filter_func
+from yt_dlq.utils import YtdlqLogger, match_filter_func
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
@@ -64,7 +65,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         "writethumbnail": True,
     }
     failed_downloads = []
-    with YoutubeDL(ydl_opts) as ydl:
+    with YoutubeDL(params=ydl_opts) as ydl:
         channels = all_urls_dict
         for ch_idx, (channel_id, channel) in enumerate(channels.items()):
             channel_dir = Path(args.output_dir, restrict_filename(channel["title"]))
