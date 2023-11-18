@@ -53,7 +53,9 @@ DEFAULT_ALBUM_ARTIST_OVERRIDE_ID = "_playlists"
 DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE = "Various Artists"
 # this is the default "channel"/album artist which will
 #   contain albums created using album override
-
+# TODO: This will apply to singly downloaded videos as well - consider setting
+#  to uploader if url list has one channel, and only using Various Artists if
+#   multiple channels
 
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
