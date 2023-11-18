@@ -40,6 +40,8 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     album_override: str | None
     albumartist_override: str | None
     show_args_only: bool
+    loose_videos_prefix: str | None
+    loose_videos_suffix: str | None
 
 
 def process_args():
@@ -173,6 +175,15 @@ def process_args():
     parser.add_argument(
         "--albumartist-override",
         help="Set album artist/parent folder manually",
+    )
+    parser.add_argument(
+        "--loose-videos-prefix",
+        help="Prefix to apply to uploader to generate album name for videos without an album (default: %(default)r)"
+    )
+    parser.add_argument(
+        "--loose-videos-suffix",
+        default="_",
+        help="Suffix to apply to uploader to generate album name for videos without an album (default: %(default)r)"
     )
 
     parser.add_argument(

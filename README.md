@@ -12,7 +12,7 @@ Given a channel URL, yt-dlq will download the following as audio files, in order
     - If a video is in multiple standard playlists, it will only be downloaded into the first one (unless `--playlist-duplicates` is passed on the CLI)
 1. All other (public) videos uploaded by the channel.
     - A video will only be downloaded if it hasn't already been seen in a release or a standard playlist.
-    - _Artist_ is the video's uploader, _Album_ is the uploader followed by "::Videos" (subject to change) and _Album Artist_ is the video's uploader.
+    - _Artist_ and _Album Artist_ will be set to the video uploader (i.e. channel). _Album_ will be set to the uploader prefixed with `--loose-videos-prefix` and suffixed with `--loose-videos-suffix`.
 
 You can also provide URLs for a channel's playlists/releases/videos or individual playlists/videos.
 

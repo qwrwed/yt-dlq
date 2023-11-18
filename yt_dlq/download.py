@@ -131,7 +131,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         "-metadata",
                         # f"album={channel['title']}",
                         # f"album=Videos",
-                        f"album={channel['title']}::Videos",
+                        f"album={args.loose_videos_prefix or ''}{channel['title']}{args.loose_videos_suffix or ''}",
                     ]
                     playlist_dir = channel_dir
                     # archive_filename = channel_archive_filename
