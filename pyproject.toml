@@ -5,5 +5,8 @@ version = "0.5.0"
 [tool.setuptools]
 packages = ["yt_dlq"]
 
+[tool.isort]
+profile = "black"
+
 [project.scripts]
 yt-dlq = "yt_dlq.__main__:main"
