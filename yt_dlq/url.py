@@ -57,6 +57,7 @@ DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE = "Various Artists"
 #  to uploader if url list has one channel, and only using Various Artists if
 #   multiple channels
 
+
 def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
     with open(filepath) as file:
         rawlines = file.readlines()

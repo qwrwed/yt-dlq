@@ -178,12 +178,12 @@ def process_args():
     )
     parser.add_argument(
         "--loose-videos-prefix",
-        help="Prefix to apply to uploader to generate album name for videos without an album (default: %(default)r)"
+        help="Prefix to apply to uploader to generate album name for videos without an album (default: %(default)r)",
     )
     parser.add_argument(
         "--loose-videos-suffix",
         default="_",
-        help="Suffix to apply to uploader to generate album name for videos without an album (default: %(default)r)"
+        help="Suffix to apply to uploader to generate album name for videos without an album (default: %(default)r)",
     )
 
     parser.add_argument(

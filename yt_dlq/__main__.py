@@ -1,7 +1,6 @@
 import logging
 
 from utils_python import get_logger_with_class, setup_config_logging
-
 from yt_dlq.args import process_args
 from yt_dlq.download import download_all
 from yt_dlq.file import merge_json_files, resolve_json_files
