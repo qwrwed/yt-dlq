@@ -1,16 +1,15 @@
-import logging
 import os
 import re
 import time
 from pathlib import Path
 
-from utils_python import get_logger_with_class
 from yt_dlp import YoutubeDL
 from yt_dlp.postprocessor import MetadataParserPP
 from yt_dlp.utils import DownloadError
 
+from utils_python import get_logger_with_class, make_parent_dir
 from yt_dlq.args import ProgramArgsNamespace
-from yt_dlq.file import make_parent_dir, restrict_filename
+from yt_dlq.file import restrict_filename
 from yt_dlq.state import get_download_state, set_download_state
 from yt_dlq.types import DownloadStates
 from yt_dlq.utils import YtdlqLogger, match_filter_func

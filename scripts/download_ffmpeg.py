@@ -2,8 +2,9 @@ import os
 import platform
 
 import requests
+from utils_python import download, unzip
 
-from yt_dlq.file import download, filename_from_url, unzip
+from yt_dlq.file import filename_from_url
 
 # useful references:
 # https://github.com/jely2002/youtube-dl-gui/blob/c7b586935754e7c3ebb346d16ef79495229c97c8/modules/BinaryUpdater.js#L63

@@ -1,31 +1,16 @@
-import functools
 import json
-import logging
-import shutil
-import zipfile
 from copy import deepcopy
 from datetime import datetime
 from glob import glob
 from pathlib import Path
 from typing import Optional
 
-import requests
 from mergedeep import merge
-from tqdm.auto import tqdm
-from utils_python import get_logger_with_class
 
+from utils_python import download, get_logger_with_class
 from yt_dlq.utils import YtdlqLogger
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
-
-
-def make_parent_dir(filepath):
-    Path(filepath).parent.mkdir(exist_ok=True, parents=True)
-
-
-def unzip(filename):
-    with zipfile.ZipFile(filename, "r") as zip_ref:
-        zip_ref.extractall()
 
 
 def filename_from_url(url):
@@ -71,35 +56,6 @@ def merge_json_files(json_files: list[Path]):
                     ] = playlist_dict
         merge(url_info_dict, url_info_dict_part_mutable)
     return url_info_dict
-
-
-def download(url, filepath, verbose=True):
-    """
-    Download URL to filepath
-    """
-    # https://stackoverflow.com/a/63831344
-
-    if verbose:
-        LOGGER.info(f"Downloading {url} to {filepath}")
-
-    r = requests.get(url, stream=True, allow_redirects=True)
-    if r.status_code != 200:
-        r.raise_for_status()  # Will only raise for 4xx codes, so...
-        raise RuntimeError(f"Request to {url} returned status code {r.status_code}")
-    file_size = int(r.headers.get("Content-Length", 0))
-
-    path = Path(filepath).expanduser().resolve()
-    make_parent_dir(path)
-
-    desc = "(Unknown total file size)" if file_size == 0 else ""
-    r.raw.read = functools.partial(
-        r.raw.read, decode_content=True
-    )  # Decompress if needed
-    with tqdm.wrapattr(r.raw, "read", total=file_size, desc=desc) as r_raw:
-        with path.open("wb") as f:
-            shutil.copyfileobj(r_raw, f)
-
-    return path
 
 
 def download_ytdl():

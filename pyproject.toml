@@ -7,6 +7,7 @@ packages = ["yt_dlq"]
 
 [tool.isort]
 profile = "black"
+known_first_party="utils_python"
 
 [project.scripts]
 yt-dlq = "yt_dlq.__main__:main"
