@@ -164,6 +164,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         match video_download_state:
                             case DownloadStates.NEVER_DOWNLOADED:
                                 is_duplicate = False
+                                LOGGER.info(log_string)
                             case DownloadStates.ORIGINAL_DOWNLOADED:
                                 LOGGER.info(
                                     log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
