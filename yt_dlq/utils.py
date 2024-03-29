@@ -58,7 +58,7 @@ def match_filter_func(info_dict):
 
 
 def hyphenate_date(YYYYMMDD: str):
-    match = re.match("(\d{4})(\d{2})(\d{2})", YYYYMMDD)
+    match = re.match(r"(\d{4})(\d{2})(\d{2})", YYYYMMDD)
     if not match:
         raise ValueError(f"date {YYYYMMDD} not recognised")
     return "-".join(match.groups())
