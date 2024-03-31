@@ -3,7 +3,8 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 from types import TracebackType
-from typing import Type
+
+from utils_python import make_parent_dir
 
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
@@ -113,3 +114,13 @@ class YtdlqLogger(logging.Logger):
             stacklevel=stacklevel + 1,
             extra=extra,
         )
+
+
+def make_shortcut(
+    path: Path | str = "shortcut.url",
+    url: str = "http://google.com",
+):
+    path = Path(path)
+    make_parent_dir(path)
+    with open(path, mode="w", newline="\r\n") as f:
+        f.write(f"[InternetShortcut]\nURL={url}")
