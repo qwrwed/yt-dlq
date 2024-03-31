@@ -45,7 +45,7 @@ def get_args():
         action="store_true",
         help="""
         If provided, will create one new file with matching videos and one new file with non-matching videos, keeping input file unchanged.
-        Otherwise, will create one new file with matching videos and change input file only contain non-matching videos.
+        Otherwise, will create one new file with matching videos and change input file to only contain non-matching videos.
         """,
     )
 
