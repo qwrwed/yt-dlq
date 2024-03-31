@@ -246,6 +246,10 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         tries += 1
                         try:
                             ydl.download([video["url"]])
+                            # TODO: add configuration to allow creating shortcuts?
+                            # from yt_dlq.utils import make_shortcut
+                            # make_shortcut(placeholder_path.with_suffix(".url"), url=video["url"])
+                            # ? remove_placeholder = False
                             break
                         except DownloadError as exc:
                             if "WinError" in exc.msg:
