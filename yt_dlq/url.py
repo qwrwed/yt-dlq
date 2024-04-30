@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import sys
+from copy import deepcopy
 from datetime import datetime
 from functools import partial
 from pathlib import Path
@@ -233,26 +234,24 @@ class YoutubeInfoExtractor:
     def resolve_channel_urls(
         self, url_dict_categorised: UrlCategoryDict
     ) -> UrlCategoryDict:
-        url_dict_original = url_dict_categorised.copy()
-        channel_urls = url_dict_original.pop("channel")
-        categories = []
+        url_dict_new = deepcopy(url_dict_categorised)
+        channel_urls = url_dict_new.pop("channel")
         while len(channel_urls) > 0:
             url = channel_urls.pop()
             try:
                 url_releases = f"{url}/releases"
                 self.ydl.extract_info(url_releases, download=False)
-                if "release" not in url_dict_original:
-                    url_dict_original = {"channel_releases": [], **url_dict_original}
-                url_dict_original["channel_releases"].append(url_releases)
+                if "release" not in url_dict_new:
+                    url_dict_new = {"channel_releases": [], **url_dict_new}
+                url_dict_new["channel_releases"].append(url_releases)
             except DownloadError as exc:
                 pass
-            url_dict_original["channel_playlists"].append(f"{url}/playlists")
-            url_dict_original["channel_videos"].append(f"{url}/videos")
-
+            url_dict_new["channel_playlists"].append(f"{url}/playlists")
+            url_dict_new["channel_videos"].append(f"{url}/videos")
         urls_from_channel = {}
         for category in PLAYLIST_CATEGORIES:
             urls_from_channel.setdefault(category, [])
-            for channel_category_url in url_dict_original.pop(f"channel_{category}s"):
+            for channel_category_url in url_dict_new.pop(f"channel_{category}s"):
                 channel_category_info = self.get_info(channel_category_url)
                 for entry in channel_category_info["entries"]:
                     entry_url = entry["url"]
@@ -265,8 +264,8 @@ class YoutubeInfoExtractor:
                     urls_from_channel[category].append(entry_url)
         url_dict_resolved = {
             category: urls_from_channel.get(category, [])
-            + url_dict_original.get(category, [])
-            for category in url_dict_original.keys()
+            + url_dict_new.get(category, [])
+            for category in url_dict_new.keys()
         }
         return url_dict_resolved
 
