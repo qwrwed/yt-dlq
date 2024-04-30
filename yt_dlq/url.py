@@ -154,9 +154,9 @@ def resolve_recursive_playlist_group(
             f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_subgroup_title!r}"
         )
         playlist_subgroup_url_fixed = input("  Paste the resulting URL here: ")
-        playlist_subgroup_urls_fixed[
-            playlist_subgroup_url
-        ] = playlist_subgroup_url_fixed
+        playlist_subgroup_urls_fixed[playlist_subgroup_url] = (
+            playlist_subgroup_url_fixed
+        )
         with open(playlist_group_urls_fixed_path, "w+") as file:
             json.dump(playlist_subgroup_urls_fixed, file, indent=2)
     return playlist_subgroup_url_fixed
@@ -219,9 +219,11 @@ class YoutubeInfoExtractor:
                         release_year = release_date[:4]
                 info_out = {
                     "album": mobj.group("album".strip()),
-                    "artists": clean_artist
-                    if (clean_artist := mobj.group("clean_artist"))
-                    else [a.strip() for a in mobj.group("artist").split("·")],
+                    "artists": (
+                        clean_artist
+                        if (clean_artist := mobj.group("clean_artist"))
+                        else [a.strip() for a in mobj.group("artist").split("·")]
+                    ),
                     "track": mobj.group("track").strip(),
                     "release_date": release_date,
                     "release_year": int_or_none(release_year),
