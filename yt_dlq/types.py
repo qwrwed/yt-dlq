@@ -3,6 +3,7 @@ from typing import Optional
 
 Url = str
 UrlList = list[Url]
+UrlSet = set[Url]
 UrlCategoryDict = dict[str, UrlList]
 
 PLAYLIST_CATEGORIES = ("release", "playlist")

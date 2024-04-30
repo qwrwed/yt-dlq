@@ -19,7 +19,7 @@ from utils_python import get_logger_with_class, make_parent_dir
 from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import generate_json_output_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
-from yt_dlq.types import PLAYLIST_CATEGORIES
+from yt_dlq.types import PLAYLIST_CATEGORIES, UrlSet
 from yt_dlq.utils import YtdlqLogger, hyphenate_date
 
 if TYPE_CHECKING:
@@ -86,18 +86,18 @@ def categorise_urls(url_list: UrlList) -> UrlCategoryDict:
     url_dict_categorised: dict[Optional[str], UrlList] = (
         {"release": []} | {k: [] for k in URL_CATEGORY_PATTERNS} | {None: []}
     )
-    unknown_urls: UrlList = []
-    known_urls: UrlList = []
+    unknown_urls: UrlSet = set()
+    known_urls: UrlSet = set()
     for url in url_list:
-        if url in (known_urls + unknown_urls):
+        if url in (known_urls | unknown_urls):
             continue
         url_category, url_categorised = get_url_category(url)
         if url_category is not None:
-            known_urls.append(url)
-            known_urls.append(url_categorised)
+            known_urls.add(url)
+            known_urls.add(url_categorised)
         else:
             LOGGER.warning(f"URL format not recognised: {url!r}")
-            unknown_urls.append(url)
+            unknown_urls.add(url)
         url_dict_categorised[url_category].append(url_categorised)
     del url_dict_categorised[None]
     return url_dict_categorised
