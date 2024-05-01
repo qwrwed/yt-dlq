@@ -16,9 +16,9 @@ from prettyprinter import cpprint
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, int_or_none
 
-from utils_python import get_logger_with_class, make_parent_dir
+from utils_python import dump_data, get_logger_with_class, make_parent_dir
 from yt_dlq.args import ProgramArgsNamespace
-from yt_dlq.file import generate_json_output_filename
+from yt_dlq.file import generate_json_output_filename, restrict_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES, UrlSet
 from yt_dlq.utils import YtdlqLogger, hyphenate_date
@@ -188,6 +188,26 @@ class YoutubeInfoExtractor:
 
     def get_info(self, url: str):
         return self.ydl.extract_info(url, download=False)
+
+    def get_title(self, url: str):
+        category, _ = get_url_category(url)
+        info = self.ydl.extract_info(url, download=False)
+        match category:
+            case "channel":
+                title = info["channel"]
+            case "channel_releases":
+                title = info["title"]
+            case "channel_playlists":
+                title = info["title"]
+            case "playlist":
+                title = f"{info['channel']} - {info['title']}"
+            case "channel_videos":
+                title = info["title"]
+            case "video":
+                title = f"{info['channel']} - {info['title']}"
+            case _:
+                title = info["title"]
+        return title
 
     def music_info_from_url(self, url: str):
         video_info = self.get_info(url)
@@ -704,7 +724,11 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
 
     if args.use_archives:
-        json_output_filename = generate_json_output_filename(args.json_file_prefix)
+        if args.json_file_prefix is None and len(urls_input_list) == 1:
+            json_file_prefix = yie.get_title(urls_input_list[0])
+        else:
+            json_file_prefix = args.json_file_prefix
+        json_output_filename = generate_json_output_filename(json_file_prefix)
         json_output_filepath = Path(args.output_dir, "_json", json_output_filename)
         atexit.register(
             lambda: show_retrieved_urls_filepath(json_output_filepath, args)
