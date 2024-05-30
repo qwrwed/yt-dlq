@@ -1,10 +1,13 @@
 import logging
+import math
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from types import TracebackType
+from typing import TypeVar
 
-from utils_python import make_parent_dir
+from utils_python import is_iterable, make_parent_dir
 
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
@@ -70,11 +73,13 @@ class YtdlqLogger(logging.Logger):
         self,
         msg: object,
         *args: object,
-        exc_info: None
-        | bool
-        | tuple[type[BaseException], BaseException, TracebackType | None]
-        | tuple[None, None, None]
-        | BaseException = None,
+        exc_info: (
+            None
+            | bool
+            | tuple[type[BaseException], BaseException, TracebackType | None]
+            | tuple[None, None, None]
+            | BaseException
+        ) = None,
         stack_info: bool = False,
         stacklevel: int = 1,
         extra: Mapping[str, object] | None = None,
@@ -124,3 +129,40 @@ def make_shortcut(
     make_parent_dir(path)
     with open(path, mode="w", newline="\r\n") as f:
         f.write(f"[InternetShortcut]\nURL={url}")
+
+
+ENTRIES_KEY = "entries"
+INDEX_KEY = "index"
+T = TypeVar("T")
+
+
+def sorted_nested_with_entries(obj: T) -> T:
+    obj_copy = deepcopy(obj)
+    if isinstance(obj_copy, dict):
+        iterable_items = {}
+        non_iterable_items = {}
+
+        entries_value = obj_copy.pop(ENTRIES_KEY) if ENTRIES_KEY in obj_copy else None
+
+        def get_key(elem):
+            k, v = elem
+            if isinstance(v, dict) and "index" in v:
+                return v["index"]
+            return k
+
+        for k, v in sorted(obj_copy.items(), key=get_key):
+            if is_iterable(v):
+                iterable_items[k] = sorted_nested_with_entries(v)
+            else:
+                non_iterable_items[k] = sorted_nested_with_entries(v)
+
+        result = {**non_iterable_items, **iterable_items}
+        if entries_value is not None:
+            result[ENTRIES_KEY] = sorted_nested_with_entries(entries_value)
+        return result
+
+    elif isinstance(obj_copy, (list, tuple)):
+        return obj_copy.__class__(sorted((sorted_nested_with_entries(e) for e in obj)))
+
+    else:
+        return obj_copy

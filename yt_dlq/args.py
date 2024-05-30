@@ -4,7 +4,6 @@ from pprint import pprint
 from configargparse import ArgumentParser, Namespace
 
 from utils_python import get_logger_with_class, get_platform
-from yt_dlq.file import generate_json_output_filename
 from yt_dlq.types import Url
 from yt_dlq.utils import YtdlqLogger, get_path
 

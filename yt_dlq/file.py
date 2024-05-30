@@ -23,17 +23,6 @@ from yt_dlp.utils import sanitize_filename
 def restrict_filename(filename):
     return sanitize_filename(filename, restricted=True)
 
-
-def generate_json_output_filename(prefix: Optional[str]):
-    prefix = prefix or ""
-    if prefix and not prefix.endswith("_"):
-        prefix = prefix + "_"
-    ts = datetime.now()
-    return restrict_filename(
-        f"{prefix}urls_all_{ts.replace(microsecond=0).isoformat()}.json"
-    )
-
-
 def resolve_json_files(json_file_expression: Path):
     return [Path(json_file) for json_file in glob(str(json_file_expression))]
 

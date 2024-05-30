@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import atexit
+from collections import Counter
+import hashlib
 import json
 import logging
+import os.path
 import re
 import sys
 from copy import deepcopy
@@ -16,16 +19,12 @@ from prettyprinter import cpprint
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, int_or_none
 
-from utils_python import (
-    dump_data,
-    get_logger_with_class,
-    read_dict_from_file,
-)
+from utils_python import dump_data, get_logger_with_class, read_dict_from_file
 from yt_dlq.args import ProgramArgsNamespace
-from yt_dlq.file import generate_json_output_filename, restrict_filename
+from yt_dlq.file import restrict_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES, UrlSet
-from yt_dlq.utils import YtdlqLogger, hyphenate_date
+from yt_dlq.utils import YtdlqLogger, hyphenate_date, sorted_nested_with_entries
 
 if TYPE_CHECKING:
     from typing import Iterable
@@ -241,7 +240,8 @@ class YoutubeInfoExtractor:
 
     def persist_url_info_dict(self):
         if self.url_info_dict_path is not None:
-            dump_data(self.url_info_dict, self.url_info_dict_path)
+            url_info_dict_sorted = sorted_nested_with_entries(self.url_info_dict)
+            dump_data(url_info_dict_sorted, self.url_info_dict_path)
 
     def add_playlists_to_url_info_dict(
         self,
@@ -584,28 +584,31 @@ class YoutubeInfoExtractor:
     def get_title(self, url: str):
         category = get_url_category(url)
         info = self.ydl.extract_info(url, download=False)
-        if info["id"].startswith("@"):
-            channel_name = info["id"]
+        dump_data(info)
+
+        uploader_id = info.get("uploader_id")
+        if uploader_id and uploader_id.startswith("@"):
+            channel_name = info["uploader_id"]
         else:
             channel_name = info["channel"]
 
         item_title = info["title"]
 
-        channel_name = restrict_filename(channel_name)
+        channel_name = restrict_filename(channel_name).replace("_-_", "_")
         item_title = restrict_filename(item_title)
         match category:
             case "channel":
-                title = channel_name
+                title = f"{channel_name} channel"
             case "channel_releases":
-                title = item_title
+                title = f"{channel_name} releases"
             case "channel_playlists":
-                title = item_title
+                title = f"{channel_name} playlists"
             case "playlist":
-                title = f"{channel_name} {item_title}"
+                title = f"{channel_name} playlist {item_title}"
             case "channel_videos":
-                title = item_title
+                title = f"{channel_name} videos"
             case "video":
-                title = f"{channel_name} {item_title}"
+                title = f"{channel_name} video {item_title}"
             case _:
                 title = item_title
         return title
@@ -794,6 +797,16 @@ class YoutubeInfoExtractor:
                     for video_info in playlist_info["entries"].values():
                         video_info.setdefault("music_info", {})[field_name] = field
                     playlist_info.setdefault("music_info", {})[field_name] = field
+                    self.persist_url_info_dict()  # filled metadata for playlist
+
+def get_hash(data: any):
+    data_string = json.dumps(data)
+    data_bytes = data_string.encode()
+    data_hashed = hashlib.sha1(data_bytes).hexdigest()
+    return data_hashed
+
+
+JSON_URLS_FILESTEM_DELIMITER = " "
 
 
 def get_all_urls_dict(args: ProgramArgsNamespace):
@@ -805,12 +818,38 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     yie = YoutubeInfoExtractor(args)
 
     if args.use_archives:
-        if args.json_file_prefix is None and len(urls_input_list) == 1:
-            json_file_prefix = yie.get_title(urls_input_list[0])
+        json_file_stem_prefix = None
+        archive_dir = Path(args.output_dir, "_json")
+        json_file_stem_prefix = datetime.now().replace(microsecond=0).isoformat()
+        if args.json_file_prefix is not None:
+            json_file_stem_suffix = restrict_filename(args.json_file_prefix)
         else:
-            json_file_prefix = args.json_file_prefix
-        json_output_filename = restrict_filename(f"{json_file_prefix}.json")
-        json_output_filepath = Path(args.output_dir, "_json", json_output_filename)
+            if len(urls_input_list) == 1:
+                json_file_stem_suffix = yie.get_title(urls_input_list[0])
+            else:
+                json_file_stem_suffix = get_hash(urls_input_list)[:10]
+
+        if json_file_stem_prefix is None:
+            json_output_filepath = Path(archive_dir, json_file_stem_suffix).with_suffix(
+                ".json"
+            )
+        else:
+            json_file_stem_prefix = restrict_filename(json_file_stem_prefix)
+            possible_filepaths = [
+                path
+                for path in sorted(
+                    archive_dir.iterdir(), key=os.path.getmtime, reverse=True
+                )
+                if path.stem.endswith(json_file_stem_suffix)
+            ]
+            if len(possible_filepaths) >= 1:
+                json_output_filepath = possible_filepaths[0]
+            else:
+                json_output_filepath = Path(
+                    archive_dir,
+                    f"{json_file_stem_prefix}{JSON_URLS_FILESTEM_DELIMITER}{json_file_stem_suffix}",
+                )
+        json_output_filepath = json_output_filepath.with_suffix(".json")
         yie.url_info_dict_path = json_output_filepath
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
 
@@ -819,8 +858,6 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             lambda: show_retrieved_urls_filepath(json_output_filepath, args)
         )
 
-    # with open(json_output_filepath, "w+") as file:
-        # json.dump(url_info_dict, file, indent=4)
     return url_info_dict
 
 
