@@ -1,7 +1,10 @@
 import json
+import logging
 
-from utils_python import make_parent_dir
+from utils_python import make_parent_dir, rotate_file
 from yt_dlq.types import DownloadStates
+
+LOGGER = logging.getLogger(__name__)
 
 
 def get_archive_id(info_dict: dict):
@@ -18,6 +21,7 @@ def create_json_file(path):
 
 def get_download_state(video, channel_playlist_info, archive_path, output_format):
     try:
+        LOGGER.info(f"Attempting to read '{archive_path}'")
         with open(archive_path, "r") as f:
             info_extended = json.load(f)
             try:
@@ -31,8 +35,14 @@ def get_download_state(video, channel_playlist_info, archive_path, output_format
                 return playlist_info["download_state"]
             except KeyError:
                 return DownloadStates.NEVER_DOWNLOADED
-    except FileNotFoundError:
+    except (json.JSONDecodeError, FileNotFoundError) as exc:
+        if isinstance(exc, json.JSONDecodeError):
+            LOGGER.info(f"'{archive_path}' is unreadable; rotating")
+            rotate_file(archive_path)
+        LOGGER.info(f"Creating '{archive_path}'")
         create_json_file(archive_path)
+    except Exception as exc:
+        raise
     return DownloadStates.NEVER_DOWNLOADED
 
 
