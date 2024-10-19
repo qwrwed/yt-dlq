@@ -1,4 +1,4 @@
-# yt-dlp
+# yt-dlq
 
 A configurable command-line tool using [yt-dlp](https://github.com/yt-dlp/yt-dlp) for deduplicating and tagging music.
 
