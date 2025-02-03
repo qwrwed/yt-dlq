@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import atexit
-from collections import Counter
 import hashlib
 import json
 import logging
 import os.path
 import re
 import sys
+from collections import Counter
 from copy import deepcopy
 from datetime import datetime
 from functools import partial
@@ -24,7 +24,12 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import restrict_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES, UrlSet
-from yt_dlq.utils import YtdlqLogger, hyphenate_date, sorted_nested_with_entries
+from yt_dlq.utils import (
+    YtdlqLogger,
+    hyphenate_date,
+    matches_filter,
+    sorted_nested_with_entries,
+)
 
 if TYPE_CHECKING:
     from typing import Iterable
@@ -102,7 +107,7 @@ def get_url_id(url: Url) -> str:
 
 def categorise_urls(url_list: UrlList) -> UrlCategoryDict:
     url_dict_categorised: dict[Optional[str], UrlList] = (
-        {"release": []} | {k: [] for k in URL_CATEGORY_PATTERNS} | {None: []}
+        {"release": {}} | {k: {} for k in URL_CATEGORY_PATTERNS} | {None: {}}
     )
     unknown_urls: UrlSet = set()
     known_urls: UrlSet = set()
@@ -118,7 +123,7 @@ def categorise_urls(url_list: UrlList) -> UrlCategoryDict:
         else:
             LOGGER.warning(f"URL format not recognised: {url!r}")
             unknown_urls.add(url)
-        url_dict_categorised[url_category].append(url_categorised)
+        url_dict_categorised[url_category][url_categorised] = ""
     del url_dict_categorised[None]
     return url_dict_categorised
 
@@ -199,6 +204,7 @@ class YoutubeInfoExtractor:
             "extract_flat": True,
             "quiet": True,
             "no_warnings": True,
+            # "verbose": True,
         }
         self.ydl = YoutubeDL(params=ydl_opts)
         self.url_to_channel_id = {}
@@ -228,9 +234,10 @@ class YoutubeInfoExtractor:
         urls_input_dict_channels_resolved = self.resolve_channel_urls(
             urls_input_dict_categorised
         )
-        urls_input_dict_resolved = self.resolve_playlist_groups(
-            urls_input_dict_channels_resolved, self.args
-        )
+        # urls_input_dict_resolved = self.resolve_playlist_groups(
+        #     urls_input_dict_channels_resolved, self.args
+        # )
+        urls_input_dict_resolved = urls_input_dict_channels_resolved
         self.load_info_dict_from_path()
         self.add_playlists_to_url_info_dict(urls_input_dict_resolved)
         self.add_channels_to_url_info_dict(urls_input_dict_resolved)
@@ -257,10 +264,22 @@ class YoutubeInfoExtractor:
 
         for playlist_category in playlist_categories_ordered:
             playlist_urls = urls_input[playlist_category]
-            for i, playlist_url in enumerate(playlist_urls):
+            if playlist_urls == []:
+                if playlist_category == "release":
+                    continue
+                breakpoint()
+                pass
+
+            for i, [playlist_url, playlist_title] in enumerate(playlist_urls.items()):
+                if not matches_filter(self.args.filter_playlist_title, playlist_title):
+                    LOGGER.info(
+                        f"SKIPPING FILTERED INFO: {playlist_category} {i+1}/{len(playlist_urls)} {playlist_url!r}"
+                    )
+                    continue
                 # get info from downloader
                 LOGGER.info(
                     f"RETRIEVING INFO: {playlist_category} {i+1}/{len(playlist_urls)} {playlist_url!r}"
+                    + (f" ({playlist_title})" if playlist_title else "")
                 )
                 playlist_info = self.ydl.extract_info(playlist_url, download=False)
                 playlist_entries = playlist_info["entries"]
@@ -270,27 +289,28 @@ class YoutubeInfoExtractor:
                     ch_id = ""
                     ch_title = ""
                     ch_url = ""
-                elif self.args.albumartist_override:
-                    ch_id = self.args.albumartist_override
-                    ch_title = self.args.albumartist_override
-                    ch_url = ""
-                elif self.args.album_override:
-                    ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
-                    ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
-                    ch_url = ""
+                # elif self.args.albumartist_override:
+                #     ch_id = self.args.albumartist_override
+                #     ch_title = self.args.albumartist_override
+                #     ch_url = ""
+                # elif self.args.album_override:
+                #     ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+                #     ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
+                #     ch_url = ""
                 elif self.url_to_channel_id.get(playlist_url) is not None:
                     ch_id = self.url_to_channel_id[playlist_url]
                     ch_title = self.channel_id_to_channel_title.get(ch_id)
                     ch_url = f"https://www.youtube.com/channel/{ch_id}"
                 else:
                     ch_id = (
-                        playlist_info["channel_id"] or playlist_entries[0]["channel_id"]
+                        playlist_info["uploader_id"]
+                        or playlist_entries[0]["uploader_id"]
                     )
                     ch_title = (
-                        playlist_info["channel"] or playlist_entries[0]["channel"]
+                        playlist_info["uploader"] or playlist_entries[0]["uploader"]
                     )
                     ch_url = (
-                        playlist_info["channel_url"]
+                        playlist_info["uploader_url"]
                         or f"https://www.youtube.com/channel/{ch_id}"
                     )
 
@@ -345,9 +365,16 @@ class YoutubeInfoExtractor:
                             f" SKIPPING SEEN INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r}"
                         )
                         continue
+                    if not matches_filter(
+                        self.args.filter_video_title, video_entry["title"]
+                    ):
+                        LOGGER.info(
+                            f" SKIPPING FILTERED INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r}"
+                        )
+                        continue
 
                     LOGGER.info(
-                        f" RETRIEVING INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r}"
+                        f" RETRIEVING INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r} ({video_entry['title']})"
                     )
                     try:
                         video_info_full = self.ydl.extract_info(
@@ -363,7 +390,7 @@ class YoutubeInfoExtractor:
                         "title": video_entry["title"],
                         "url": video_entry["url"],
                         "upload_date": hyphenate_date(video_info_full["upload_date"]),
-                        "uploader": video_entry["channel_url"],
+                        "uploader": video_entry["uploader_url"],
                         "index": idx + 1,
                         "music_info": self.music_info_from_description(video_info),
                         "description": video_info["description"],
@@ -395,18 +422,18 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
-            elif self.args.albumartist_override:
-                ch_id = self.args.albumartist_override
-                ch_title = self.args.albumartist_override
-                ch_url = ""
-            elif self.args.album_override:
-                ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
-                ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
-                ch_url = ""
+            # elif self.args.albumartist_override:
+            #     ch_id = self.args.albumartist_override
+            #     ch_title = self.args.albumartist_override
+            #     ch_url = ""
+            # elif self.args.album_override:
+            #     ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+            #     ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
+            #     ch_url = ""
             else:
-                ch_id = channel_videos_info["channel_id"]
-                ch_title = channel_videos_info["channel"]
-                ch_url = channel_videos_info["channel_url"]
+                ch_id = channel_videos_info["uploader_id"]
+                ch_title = channel_videos_info["uploader"]
+                ch_url = channel_videos_info["uploader_url"]
 
             # set playlist properties
             if self.args.album_override:
@@ -462,6 +489,13 @@ class YoutubeInfoExtractor:
                         f" SKIPPING SEEN INFO: channel video {idx+1}/{len(channel_videos_entries)} {video_entry['url']!r}"
                     )
                     continue
+                if not matches_filter(
+                    self.args.filter_video_title, video_entry["title"]
+                ):
+                    LOGGER.info(
+                        f" SKIPPING FILTERED INFO: channel video {idx+1}/{len(channel_videos_entries)} {video_entry['url']!r}"
+                    )
+                    continue
 
                 LOGGER.info(
                     f" RETRIEVING INFO: channel video {idx+1}/{len(channel_videos_entries)} {video_entry['url']!r}"
@@ -513,18 +547,18 @@ class YoutubeInfoExtractor:
                 ch_id = ""
                 ch_title = ""
                 ch_url = ""
-            elif self.args.albumartist_override:
-                ch_id = self.args.albumartist_override
-                ch_title = self.args.albumartist_override
-                ch_url = ""
-            elif self.args.album_override:
-                ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
-                ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
-                ch_url = ""
+            # elif self.args.albumartist_override:
+            #     ch_id = self.args.albumartist_override
+            #     ch_title = self.args.albumartist_override
+            #     ch_url = ""
+            # elif self.args.album_override:
+            #     ch_id = DEFAULT_ALBUM_ARTIST_OVERRIDE_ID
+            #     ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
+            #     ch_url = ""
             else:
-                ch_id = video_info["channel_id"]
-                ch_title = video_info["channel"]
-                ch_url = video_info["channel_url"]
+                ch_id = video_info["uploader_id"]
+                ch_title = video_info["uploader"]
+                ch_url = video_info["uploader_url"]
 
             # set playlist properties
             if self.args.album_override:
@@ -584,18 +618,19 @@ class YoutubeInfoExtractor:
     def get_title(self, url: str):
         category = get_url_category(url)
         info = self.ydl.extract_info(url, download=False)
-        dump_data(info)
+        # dump_data(info)
 
         uploader_id = info.get("uploader_id")
         if uploader_id and uploader_id.startswith("@"):
             channel_name = info["uploader_id"]
         else:
             channel_name = info["channel"]
-
         item_title = info["title"]
 
-        channel_name = restrict_filename(channel_name).replace("_-_", "_")
+        if channel_name is not None:
+            channel_name = restrict_filename(channel_name).replace("_-_", "_")
         item_title = restrict_filename(item_title)
+        {k: v for k, v in info.items() if type(v) not in {dict, list, set}}
         match category:
             case "channel":
                 title = f"{channel_name} channel"
@@ -656,7 +691,8 @@ class YoutubeInfoExtractor:
             return info_out
 
     def resolve_channel_urls(
-        self, url_dict_categorised: UrlCategoryDict
+        self,
+        url_dict_categorised: UrlCategoryDict,
     ) -> UrlCategoryDict:
         url_dict_new = deepcopy(url_dict_categorised)
         channel_urls = url_dict_new.pop("channel")
@@ -674,7 +710,7 @@ class YoutubeInfoExtractor:
             url_dict_new["channel_videos"].append(f"{url}/videos")
         urls_from_channel = {}
         for category in PLAYLIST_CATEGORIES:
-            urls_from_channel.setdefault(category, [])
+            urls_from_channel.setdefault(category, {})
             for channel_category_url in url_dict_new.pop(f"channel_{category}s"):
                 channel_category_info = self.get_info(channel_category_url)
                 for entry in channel_category_info["entries"]:
@@ -685,22 +721,26 @@ class YoutubeInfoExtractor:
                     self.channel_id_to_channel_title[
                         channel_category_info["uploader_id"]
                     ] = channel_category_info["uploader"]
-                    urls_from_channel[category].append(entry_url)
+                    urls_from_channel[category][entry_url] = entry["title"]
         url_dict_resolved = {
-            category: urls_from_channel.get(category, [])
-            + url_dict_new.get(category, [])
+            category: {
+                **urls_from_channel.get(category, {}),
+                **url_dict_new.get(category, {}),
+            }
             for category in url_dict_new.keys()
         }
         return url_dict_resolved
 
     def resolve_playlist_groups(
-        self, urls_input: dict[str, set[str]], args: ProgramArgsNamespace
+        self,
+        urls_input: dict[str, set[str]],
+        args: ProgramArgsNamespace,
     ):
         """turns playlist groups into playlists"""
         ydl = self.ydl
         playlist_groups_resolved_tab = {}
         urls_group_playlist = urls_input["playlist"]
-        playlist_urls_resolved = set()
+        playlist_urls_resolved = {}
         for i, playlist_group_url in enumerate(urls_group_playlist):
             # playlist group e.g. https://www.youtube.com/c/daftpunk/playlists or
             # playlist subgroup e.g. https://www.youtube.com/c/daftpunk/playlists?view=71&sort=dd&shelf_id=0
@@ -727,7 +767,9 @@ class YoutubeInfoExtractor:
                         f" ^ SKIPPING Favourites playlist ({playlist_group_info['title']=}) ^ "
                     )
                 else:
-                    playlist_urls_resolved.add(playlist_group_url)
+                    playlist_urls_resolved[playlist_group_url] = playlist_group_info[
+                        "title"
+                    ]
                 continue
             raise NotImplementedError
             ## only to be updated if able to reproduce issue:
@@ -784,10 +826,20 @@ class YoutubeInfoExtractor:
                     fields_list = list(fields_debug.values())
                     fields_set = set(fields_debug.values())
                     if len(fields_set) > 1:
-                        field = max(fields_set, key=fields_list.count)
-                        LOGGER.warning(
-                            f"Got conflicting {field_name!r}: {fields_set}. choosing most common: {field}"
-                        )
+                        [(most_common_field, most_common_field_count)] = Counter(
+                            fields_list
+                        ).most_common(1)
+
+                        if most_common_field_count > 1:
+                            field = most_common_field
+                            LOGGER.warning(
+                                f"Got conflicting {field_name!r}: {fields_set}. choosing most common: {field}"
+                            )
+                        else:
+                            field = "AAAAAA"
+                            LOGGER.warning(
+                                f"Got conflicting {field_name!r}: {fields_set}. No most common: using {field=}"
+                            )
                     elif len(fields_set) == 1:
                         field = fields_set.pop()
                     elif field_name == "album" and playlist_info["title"]:
@@ -799,6 +851,7 @@ class YoutubeInfoExtractor:
                     playlist_info.setdefault("music_info", {})[field_name] = field
                     self.persist_url_info_dict()  # filled metadata for playlist
 
+
 def get_hash(data: any):
     data_string = json.dumps(data)
     data_bytes = data_string.encode()
@@ -807,6 +860,7 @@ def get_hash(data: any):
 
 
 JSON_URLS_FILESTEM_DELIMITER = " "
+JSON_FILE_VERSION = 1
 
 
 def get_all_urls_dict(args: ProgramArgsNamespace):
@@ -818,8 +872,10 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
     yie = YoutubeInfoExtractor(args)
 
     if args.use_archives:
-        json_file_stem_prefix = None
+        # json_file_stem_prefix = None
         archive_dir = Path(args.output_dir, "_json")
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
         json_file_stem_prefix = datetime.now().replace(microsecond=0).isoformat()
         if args.json_file_prefix is not None:
             json_file_stem_suffix = restrict_filename(args.json_file_prefix)
@@ -828,6 +884,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
                 json_file_stem_suffix = yie.get_title(urls_input_list[0])
             else:
                 json_file_stem_suffix = get_hash(urls_input_list)[:10]
+        json_file_stem_suffix += f".v{JSON_FILE_VERSION}"
 
         if json_file_stem_prefix is None:
             json_output_filepath = Path(archive_dir, json_file_stem_suffix).with_suffix(

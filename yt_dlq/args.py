@@ -41,6 +41,8 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     show_args_only: bool
     loose_videos_prefix: str | None
     loose_videos_suffix: str | None
+    filter_video_title: str | None
+    filter_playlist_title: str | None
 
 
 def process_args():
@@ -109,6 +111,7 @@ def process_args():
         "--ffmpeg-location",
         metavar="PATH",
         help="Location of the ffmpeg binary; either the path to the binary or its containing directory",
+        default=get_path() if get_platform() == "windows" else None,
     )
     duplicate_handler_group = parser.add_mutually_exclusive_group()
     duplicate_handler_group.add_argument(
@@ -189,6 +192,18 @@ def process_args():
         "--show-args-only",
         action="store_true",
         help="Print args to stdout, then exit",
+    )
+
+    parser.add_argument(
+        "--filter-video-title",
+        metavar="PATTERN",
+        help="Only download videos whose titles contain $PATTERN",
+    )
+
+    parser.add_argument(
+        "--filter-playlist-title",
+        metavar="PATTERN",
+        help="Only download playlists whose titles contain $PATTERN",
     )
 
     parsed: ProgramArgsNamespace = parser.parse_args(namespace=ProgramArgsNamespace())

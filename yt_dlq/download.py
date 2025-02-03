@@ -1,3 +1,4 @@
+import glob
 import os
 import re
 import time
@@ -7,7 +8,12 @@ from yt_dlp import YoutubeDL
 from yt_dlp.postprocessor import MetadataParserPP
 from yt_dlp.utils import DownloadError
 
-from utils_python import get_logger_with_class, make_parent_dir
+from utils_python import (
+    get_logger_with_class,
+    make_parent_dir,
+    preserve_filedate,
+    set_tag_mp4_text,
+)
 from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import restrict_filename
 from yt_dlq.state import get_download_state, set_download_state
@@ -17,16 +23,20 @@ from yt_dlq.utils import YtdlqLogger, match_filter_func
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
 
 base_postprocessors = [
+    {
+        "key": "MetadataParser",
+        "actions": [(MetadataParserPP.replacer, "description", "\n", "\r\n")],
+        "when": "pre_process",
+    },
     {"key": "FFmpegMetadata"},
     {"key": "EmbedThumbnail"},
 ]
 
 format_postprocessors = {
-    "mkv": [  # required for custom/arbitrary fields
-        {
-            "key": "MetadataParser",
-            "actions": [(MetadataParserPP.Actions.INTERPRET, "uploader", "%(artist)s")],
-        },
+    "m4a": [
+        {"key": "FFmpegExtractAudio", "preferredcodec": "m4a"},
+    ],
+    "mkv": [
         {
             "key": "FFmpegVideoRemuxer",
             "preferedformat": "mkv",
@@ -37,14 +47,14 @@ format_postprocessors = {
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
             "preferredquality": "192",
-        }
+        },
     ],
 }
 
 
 def download_all(args: ProgramArgsNamespace, all_urls_dict):
-    postprocessors = base_postprocessors + format_postprocessors.get(
-        args.output_format, []
+    postprocessors = (
+        format_postprocessors.get(args.output_format, []) + base_postprocessors
     )
     ydl_opts = {
         "logger": LOGGER,
@@ -59,6 +69,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         # "postprocessors": None,
         # "ffmpeg_location": None,
         "match_filter": match_filter_func,
+        # "prefer_ffmpeg": True,
         "ffmpeg_location": args.ffmpeg_location,
         # "embedthumbnail": True,
         "writethumbnail": True,
@@ -66,6 +77,16 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
     failed_downloads = []
     with YoutubeDL(params=ydl_opts) as ydl:
         channels = all_urls_dict
+
+        # create a dict of video ids in the root dir to avoid downloading duplicates
+        videos_in_output_dir = {}
+        for m4a_filepath in args.output_dir.rglob(f"*.{args.output_format}"):
+            match = re.search(r"\[(.*?)\]$", m4a_filepath.stem)
+            if not match:
+                continue
+            _video_id = match.group(1)
+            videos_in_output_dir[_video_id] = m4a_filepath
+
         for ch_idx, (channel_id, channel) in enumerate(channels.items()):
             channel_dir = Path(args.output_dir, restrict_filename(channel["title"]))
             if channel_id:
@@ -144,6 +165,12 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                 }
                 videos = playlist["entries"]
                 for video_index, (video_id, video) in enumerate(videos.items()):
+                    if args.filter_video_title is not None and not re.search(
+                        args.filter_video_title, video["title"]
+                    ):
+                        log_string = f"  SKIPPING TITLE-FILTERED VIDEO {video_index+1}/{len(videos)}: {video['title']!r} (filter='{args.filter_video_title}')"
+                        continue
+                    downloaded = False
                     expected_path = Path(
                         playlist_dir,
                         f"{restrict_filename(video['title'])}[{video_id}].{args.output_format}",
@@ -154,7 +181,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         LOGGER.info(log_string + " - UNAVAILABLE; SKIPPING")
                         continue
                     remove_placeholder = False
-                    if args.use_archives:
+                    if args.use_archives and False:
                         video_download_state = get_download_state(
                             video,
                             channel_playlist_info,
@@ -165,6 +192,9 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             case DownloadStates.NEVER_DOWNLOADED:
                                 is_duplicate = False
                                 LOGGER.info(log_string)
+                            case DownloadStates.DOWNLOAD_FAILED:
+                                is_duplicate = False
+                                LOGGER.info(log_string + " (PREVIOUSLY FAILED)")
                             case DownloadStates.ORIGINAL_DOWNLOADED:
                                 LOGGER.info(
                                     log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
@@ -223,6 +253,17 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     else:
                         video_download_state = DownloadStates.NEVER_DOWNLOADED
 
+                    if video["id"] in videos_in_output_dir:
+                        log_string += " - EXISTS IN OUTPUT DIR"
+                        if args.text_placeholders and not placeholder_path.exists():
+                            LOGGER.info(log_string + " - CREATING PLACEHOLDER")
+                            make_parent_dir(placeholder_path)
+                            open(placeholder_path, "w+").close()
+                            continue
+                        else:
+                            LOGGER.info(log_string + " - SKIPPING")
+                            continue
+
                     if playlist_id and len(playlist["entries"]) > 1:
                         ppa[-1] = f"track={video_index+1}"
                     uploader_metadata = [
@@ -245,14 +286,20 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     while True:
                         tries += 1
                         try:
+                            success = False
                             ydl.download([video["url"]])
                             # TODO: add configuration to allow creating shortcuts?
                             # from yt_dlq.utils import make_shortcut
                             # make_shortcut(placeholder_path.with_suffix(".url"), url=video["url"])
                             # ? remove_placeholder = False
+                            success = True
                             break
                         except DownloadError as exc:
                             if "WinError" in exc.msg:
+                                continue
+                            elif "Read timed out" in exc.msg:
+                                continue
+                            elif "more expected" in exc.msg:
                                 continue
                             elif (
                                 "Join this channel to get access to members-only content like this video, and other exclusive perks."
@@ -264,14 +311,37 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                                 exc.msg,
                             ):
                                 break
+                            elif "Sign in to confirm your age." in exc.msg:
+                                break
                             elif "ffmpeg not found" in exc.msg:
                                 LOGGER.info(
                                     "  Install by running 'python download_ffmpeg.py'"
                                 )
                                 exit()
+                            elif (
+                                "Supported filetypes for thumbnail embedding are:"
+                                in exc.msg
+                            ):
+                                stem = expected_path.stem
+                                exts = {
+                                    path.suffix[1:]
+                                    for path in expected_path.parent.glob(
+                                        f"{glob.escape(stem)}.*"
+                                    )
+                                }
+                                LOGGER.info(
+                                    f"Deleting {stem}.{{{','.join(exts)}}} and trying again"
+                                )
+                                for ext in exts:
+                                    expected_path.with_suffix(f".{ext}").unlink()
+                                if tries > 1:
+                                    breakpoint()
+                                    pass
+                                continue
                             else:
                                 breakpoint()
-                            raise
+                                pass
+
                         except PermissionError as exc:
                             if tries >= 5:
                                 raise
@@ -300,19 +370,30 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                     #     #     raise
                     # if retcode == 1:
                     #     breakpoint()
+
+                    if not args.text_placeholders:
+                        if args.output_format == "m4a":
+                            if "uploader" in video:
+                                with preserve_filedate(expected_path):
+                                    set_tag_mp4_text(
+                                        expected_path, "uploader", video["uploader"]
+                                    )
+
                     if remove_placeholder:
                         os.remove(placeholder_path)
 
-                    if args.use_archives:
+                    if args.use_archives and False:
+                        if not success:
+                            download_state = DownloadStates.DOWNLOAD_FAILED
+                        elif is_duplicate:
+                            download_state = DownloadStates.DUPLICATE_DOWNLOADED
+                        else:
+                            download_state = DownloadStates.ORIGINAL_DOWNLOADED
                         set_download_state(
                             video,
                             channel_playlist_info,
                             channel_archive_filepath_json,
-                            (
-                                DownloadStates.DUPLICATE_DOWNLOADED
-                                if is_duplicate
-                                else DownloadStates.ORIGINAL_DOWNLOADED
-                            ),
+                            download_state,
                             args.output_format,
                         )
     if failed_downloads:

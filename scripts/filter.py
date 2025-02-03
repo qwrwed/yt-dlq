@@ -1,6 +1,7 @@
 """
 Filter a JSON url file based on strings to include/exclude
 """
+
 import argparse
 import json
 from copy import copy, deepcopy

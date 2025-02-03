@@ -3,6 +3,7 @@ import math
 import re
 from collections.abc import Mapping
 from copy import deepcopy
+from os import PathLike
 from pathlib import Path
 from types import TracebackType
 from typing import TypeVar
@@ -12,7 +13,10 @@ from utils_python import is_iterable, make_parent_dir
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
 
-def get_resolve_filepath(file_path: Path | str, root: Path | str = ROOT_PROJECT_DIR):
+def get_resolve_filepath(
+    file_path: Path | PathLike = ".",
+    root: Path | PathLike = ROOT_PROJECT_DIR,
+):
     if not isinstance(file_path, Path):
         file_path = Path(file_path)
     if not isinstance(root, Path):
@@ -20,12 +24,14 @@ def get_resolve_filepath(file_path: Path | str, root: Path | str = ROOT_PROJECT_
 
     dir_path = file_path.parent
     file_name = file_path.name
+
     if (
-        not dir_path.exists()
+        (not dir_path.exists() or dir_path.is_dir())
         and not dir_path.is_absolute()
         and (dir_path_new := Path(root, dir_path)).exists()
     ):
         return Path(dir_path_new, file_name).absolute()
+
     return file_path
 
 
@@ -166,3 +172,12 @@ def sorted_nested_with_entries(obj: T) -> T:
 
     else:
         return obj_copy
+
+
+def matches_filter(
+    pattern: str | None,
+    string: str,
+) -> bool:
+    if pattern is None or re.search(pattern, string):
+        return True
+    return False

@@ -4,7 +4,8 @@ from typing import Optional
 Url = str
 UrlList = list[Url]
 UrlSet = set[Url]
-UrlCategoryDict = dict[str, UrlList]
+UrlDict = dict[Url, str]
+UrlCategoryDict = dict[str, UrlDict]
 
 PLAYLIST_CATEGORIES = ("release", "playlist")
 

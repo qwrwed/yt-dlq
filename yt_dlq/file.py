@@ -20,8 +20,9 @@ def filename_from_url(url):
 from yt_dlp.utils import sanitize_filename
 
 
-def restrict_filename(filename):
+def restrict_filename(filename: str):
     return sanitize_filename(filename, restricted=True)
+
 
 def resolve_json_files(json_file_expression: Path):
     return [Path(json_file) for json_file in glob(str(json_file_expression))]

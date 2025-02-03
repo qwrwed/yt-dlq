@@ -1,6 +1,7 @@
 """
 Filter a JSON url file based on user input for each video.
 """
+
 import argparse
 import json
 from copy import deepcopy
