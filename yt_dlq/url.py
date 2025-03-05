@@ -906,7 +906,10 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
                     archive_dir,
                     f"{json_file_stem_prefix}{JSON_URLS_FILESTEM_DELIMITER}{json_file_stem_suffix}",
                 )
-        json_output_filepath = json_output_filepath.with_suffix(".json")
+
+        if not json_output_filepath.name.endswith(".json"):
+            json_output_filepath = json_output_filepath.with_name(json_output_filepath.name + ".json")
+
         yie.url_info_dict_path = json_output_filepath
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
 
