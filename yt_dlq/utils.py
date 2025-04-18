@@ -62,7 +62,7 @@ def escape_spaces(arg, use_singlequote=False):
 def match_filter_func(info_dict):
     if info_dict.get("is_live") is True or info_dict.get("was_live") is True:
         return "Video is/was livestream; skipping"
-    # if info_dict.get("availability") != 'public':
+    # if info_dict.get("availability") not in {'public', 'unlisted'}:
     #     return "Video is private; skipping"
     return None
 

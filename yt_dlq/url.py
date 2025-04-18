@@ -7,6 +7,7 @@ import logging
 import os.path
 import re
 import sys
+import time
 from collections import Counter
 from copy import deepcopy
 from datetime import datetime
@@ -318,7 +319,7 @@ class YoutubeInfoExtractor:
                 if self.args.album_override:
                     pl_id = self.args.album_override
                     pl_title = self.args.album_override
-                    pl_url = ""
+                    pl_url = playlist_info["webpage_url"]
                 else:
                     pl_id = playlist_info["id"]
                     pl_title = playlist_info["title"]
@@ -390,11 +391,13 @@ class YoutubeInfoExtractor:
                         "title": video_entry["title"],
                         "url": video_entry["url"],
                         "upload_date": hyphenate_date(video_info_full["upload_date"]),
-                        "uploader": video_entry["uploader_url"],
+                        "uploader": video_entry["uploader_url"]
+                        or video_entry["channel_url"],
                         "index": idx + 1,
                         "music_info": self.music_info_from_description(video_info),
                         "description": video_info["description"],
                         "duration": video_info["duration"],
+                        "availability": video_info["availability"],
                     }
 
                     playlist_dict["entries"][video_id] = video_dict
@@ -515,6 +518,7 @@ class YoutubeInfoExtractor:
                     "uploader": ch_url,
                     "description": video_info_full["description"],
                     "duration": video_info_full["duration"],
+                    "availability": video_info_full["availability"],
                 }
                 playlist_dict["entries"][video_entry["id"]] = video_dict
                 self.persist_url_info_dict()  # added video for channel
@@ -607,17 +611,39 @@ class YoutubeInfoExtractor:
                 "uploader": video_info["uploader_url"],
                 "description": video_info["description"],
                 "duration": video_info["duration"],
+                "availability": video_info["availability"],
             }
             playlist_dict["entries"][video_id] = video_dict
             self.persist_url_info_dict()  # added video for loose-video
             self.seen_video_ids.add(video_id)
 
     def get_info(self, url: str):
-        return self.ydl.extract_info(url, download=False)
+        delay_func = lambda x: x * 10
+        attempts = 0
+        max_attempts = 3
+        while True:
+            attempts += 1
+            try:
+                return self.ydl.extract_info(url, download=False)
+            except Exception as exc:
+                if (
+                    "Video unavailable. This content isn't available, try again later."
+                    not in exc.msg
+                ):
+                    raise
+                if attempts >= max_attempts:
+                    LOGGER.error("Max attempts (%d) reached", max_attempts)
+                    raise
+                delay = delay_func(attempts)
+                LOGGER.info(
+                    "Waiting for %d seconds after attempt %d...", delay, attempts
+                )
+                time.sleep(delay)
+                LOGGER.info("Retrying after wait (attempt %d)", attempts + 1)
 
     def get_title(self, url: str):
         category = get_url_category(url)
-        info = self.ydl.extract_info(url, download=False)
+        info = self.get_info(url)
         # dump_data(info)
 
         uploader_id = info.get("uploader_id")
@@ -697,7 +723,8 @@ class YoutubeInfoExtractor:
         url_dict_new = deepcopy(url_dict_categorised)
         channel_urls = url_dict_new.pop("channel")
         while len(channel_urls) > 0:
-            url = channel_urls.pop()
+            url = next(iter(channel_urls))
+            channel_urls.pop(url)
             try:
                 url_releases = f"{url}/releases"
                 self.ydl.extract_info(url_releases, download=False)
@@ -706,8 +733,8 @@ class YoutubeInfoExtractor:
                 url_dict_new["channel_releases"].append(url_releases)
             except DownloadError as exc:
                 pass
-            url_dict_new["channel_playlists"].append(f"{url}/playlists")
-            url_dict_new["channel_videos"].append(f"{url}/videos")
+            url_dict_new["channel_playlists"][f"{url}/playlists"] = ""
+            url_dict_new["channel_videos"][f"{url}/videos"] = ""
         urls_from_channel = {}
         for category in PLAYLIST_CATEGORIES:
             urls_from_channel.setdefault(category, {})
@@ -908,7 +935,9 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
                 )
 
         if not json_output_filepath.name.endswith(".json"):
-            json_output_filepath = json_output_filepath.with_name(json_output_filepath.name + ".json")
+            json_output_filepath = json_output_filepath.with_name(
+                json_output_filepath.name + ".json"
+            )
 
         yie.url_info_dict_path = json_output_filepath
     url_info_dict = yie.construct_url_info_dict(urls_input_list)
@@ -926,5 +955,5 @@ def show_retrieved_urls_filepath(json_output_filepath, args):
         return
     LOGGER.info(
         "\nTo skip URL retrieval next time, run:\n"
-        f"yt-dlq -j {str(json_output_filepath)!r} -o {args.output_dir}\n"
+        f'yt-dlq -j "{str(json_output_filepath)}" -o {args.output_dir}\n'
     )

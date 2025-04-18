@@ -87,41 +87,59 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
             _video_id = match.group(1)
             videos_in_output_dir[_video_id] = m4a_filepath
 
-        for ch_idx, (channel_id, channel) in enumerate(channels.items()):
-            channel_dir = Path(args.output_dir, restrict_filename(channel["title"]))
-            if channel_id:
-                channel_archive_filename = restrict_filename(
-                    f"videos_{channel['title']}.txt"
-                )
-                channel_archive_filename_json = restrict_filename(
-                    f"videos_{channel['title']}.json"
-                )
-            else:
-                channel_archive_filename = "videos.txt"
-                channel_archive_filename_json = "videos.json"
-            channel_archive_filepath = Path(channel_dir, channel_archive_filename)
-            channel_archive_filepath_json = Path(
-                channel_dir, channel_archive_filename_json
-            )
-            LOGGER.info(
+        for ch_idx, (_channel_id, channel) in enumerate(channels.items()):
+            log_string = (
                 f"DOWNLOADING CHANNEL {ch_idx+1}/{len(channels)}: {channel['title']!r}"
             )
+
+            if args.albumartist_override:
+                channel_title = args.albumartist_override
+                log_string += f" (as {channel_title!r})"
+            else:
+                channel_title = channel["title"]
+            LOGGER.info(log_string)
+            channel_dir = Path(args.output_dir, restrict_filename(channel_title))
+            channel_ppa = [
+                "-metadata",
+                f"album_artist={channel_title}",
+            ]
+
             playlists = channel["entries"]
+            if len(playlists) > 1 and args.album_override:
+                raise ValueError(
+                    f"got same album override '{args.album_override}' for multiple ({len(playlists)}) playlists"
+                )
             for pl_idx, (playlist_id, playlist) in enumerate(playlists.items()):
-                log_string = f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}:"
-                archives_to_write = [channel_archive_filepath]
-                ppa = [
-                    "-metadata",
-                    f"album_artist={channel['title']}",
-                ]
+                videos = playlist["entries"]
+                if not videos:
+                    continue
+
                 if playlist["title"]:
-                    LOGGER.info(log_string + f"{playlist['title']!r}")
-                    album_name = (playlist.get("music_info") or {}).get(
-                        "album"
-                    ) or playlist["title"]
+                    if args.filter_playlist_title is not None and not re.search(
+                        args.filter_playlist_title,
+                        playlist["title"],
+                        flags=re.IGNORECASE,
+                    ):
+                        log_string = f"  SKIPPING TITLE-FILTERED PLAYLIST {pl_idx+1}/{len(playlists)}: {playlist['title']!r} (filter='{args.filter_playlist_title}')"
+                        LOGGER.info(log_string)
+                        continue
+                    log_string = f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}: {playlist["title"]!r}"
+
+                    if args.album_override:
+                        playlist_title = args.album_override
+                        log_string += f" (as {playlist_title!r})"
+                    else:
+                        playlist_title = playlist["title"]
+                    LOGGER.info(log_string)
+
+                    album_name = (
+                        args.album_override
+                        or playlist.get("music_info", {}).get("album")
+                        or playlist_title
+                    )
                     playlist_dir_components = [
                         channel_dir,
-                        restrict_filename(playlist["title"]),
+                        restrict_filename(playlist_title),
                     ]
                     if playlist["type"] == "release":
                         playlist_dir_components.insert(1, "releases")
@@ -129,48 +147,41 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             # remove release folder if release doesn't have multiple entries
                             playlist_dir_components.pop()
                             album_name = "Releases"
-                    ppa += [
+                    ppa = channel_ppa + [
                         "-metadata",
                         f"album={album_name}",
                         "-metadata",
                         "track=0",
                     ]
                     playlist_dir = Path(*playlist_dir_components)
-                    playlist_archive_filename = restrict_filename(
-                        f"playlist_{playlist['title']}.txt"
-                    )
-                    playlist_archive_filepath = Path(
-                        playlist_dir, playlist_archive_filename
-                    )
-                    archives_to_write.append(playlist_archive_filepath)
-                    # archive_filename = playlist_archive_filename
-                    # archive_filepath = playlist_archive_filepath
+
                 else:
-                    LOGGER.info(log_string + f"[loose videos] {channel['title']!r}")
-                    ppa += [
+                    log_string = f" DOWNLOADING PLAYLIST {pl_idx+1}/{len(playlists)}: [loose videos] {channel_title!r}"
+                    if args.album_override:
+                        playlist_title = args.album_override
+                    else:
+                        playlist_title = f"{args.loose_videos_prefix or ''}{channel_title}{args.loose_videos_suffix or ''}"
+                    log_string += f" (as {playlist_title!r})"
+                    LOGGER.info(log_string)
+
+                    album_name = args.album_override or ""
+                    ppa = channel_ppa + [
                         "-metadata",
-                        # f"album={channel['title']}",
-                        # f"album=Videos",
-                        f"album={args.loose_videos_prefix or ''}{channel['title']}{args.loose_videos_suffix or ''}",
+                        f"album={album_name}",
                     ]
                     playlist_dir = channel_dir
-                    # archive_filename = channel_archive_filename
-                    # archive_filepath = channel_archive_filepath
-                channel_playlist_info = {
-                    "channel_id": channel_id,
-                    "channel_title": channel["title"],
-                    "playlist_id": playlist_id,
-                    "playlist_title": playlist["title"],
-                    "playlist_type": playlist["type"],
-                }
-                videos = playlist["entries"]
+
                 for video_index, (video_id, video) in enumerate(videos.items()):
                     if args.filter_video_title is not None and not re.search(
-                        args.filter_video_title, video["title"]
+                        args.filter_video_title,
+                        video["title"],
+                        flags=re.IGNORECASE,
                     ):
                         log_string = f"  SKIPPING TITLE-FILTERED VIDEO {video_index+1}/{len(videos)}: {video['title']!r} (filter='{args.filter_video_title}')"
+                        LOGGER.info(log_string)
                         continue
-                    downloaded = False
+
+                    # downloaded = False
                     expected_path = Path(
                         playlist_dir,
                         f"{restrict_filename(video['title'])}[{video_id}].{args.output_format}",
@@ -181,78 +192,6 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         LOGGER.info(log_string + " - UNAVAILABLE; SKIPPING")
                         continue
                     remove_placeholder = False
-                    if args.use_archives and False:
-                        video_download_state = get_download_state(
-                            video,
-                            channel_playlist_info,
-                            channel_archive_filepath_json,
-                            args.output_format,
-                        )
-                        match video_download_state:
-                            case DownloadStates.NEVER_DOWNLOADED:
-                                is_duplicate = False
-                                LOGGER.info(log_string)
-                            case DownloadStates.DOWNLOAD_FAILED:
-                                is_duplicate = False
-                                LOGGER.info(log_string + " (PREVIOUSLY FAILED)")
-                            case DownloadStates.ORIGINAL_DOWNLOADED:
-                                LOGGER.info(
-                                    log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
-                                )
-                                continue
-                            case DownloadStates.DUPLICATE_DOWNLOADED:
-                                LOGGER.info(
-                                    log_string + " - ALREADY DOWNLOADED IN PLAYLIST"
-                                )
-                                continue
-                            case DownloadStates.DUPLICATE_NOT_DOWNLOADED:
-                                log_string += " - DOWNLOADED IN ANOTHER PLAYLIST"
-                                if args.playlist_duplicates:
-                                    is_duplicate = True
-                                    LOGGER.info(log_string + " (DUPLICATES ENABLED)")
-                                elif (
-                                    channel_playlist_info["playlist_type"] == "release"
-                                ):
-                                    is_duplicate = True
-                                    LOGGER.info(
-                                        log_string + " (DUPLICATES ALLOWED IN RELEASES)"
-                                    )
-                                elif args.text_placeholders:
-                                    LOGGER.info(log_string + " - CREATING PLACEHOLDER")
-                                    make_parent_dir(placeholder_path)
-                                    open(placeholder_path, "w+").close()
-                                    set_download_state(
-                                        video,
-                                        channel_playlist_info,
-                                        channel_archive_filepath_json,
-                                        DownloadStates.CREATED_PLACEHOLDER,
-                                        "txt",
-                                    )
-                                    continue
-                                else:
-                                    LOGGER.info(log_string + " - SKIPPING")
-                                    continue
-                            case DownloadStates.CREATED_PLACEHOLDER:
-                                if args.playlist_duplicates:
-                                    LOGGER.info(
-                                        log_string + " - OVERWRITING PLACEHOLDER"
-                                    )
-                                    remove_placeholder = True
-                                    is_duplicate = True
-                                else:
-                                    LOGGER.info(
-                                        log_string
-                                        + " - PLACEHOLDER PREVIOUSLY CREATED - SKIPPING"
-                                    )
-                                    continue
-                            case _:
-                                # input()
-                                raise RuntimeError(
-                                    f"Unhandled download state: {repr(video_download_state)}"
-                                )
-                    else:
-                        video_download_state = DownloadStates.NEVER_DOWNLOADED
-
                     if video["id"] in videos_in_output_dir:
                         log_string += " - EXISTS IN OUTPUT DIR"
                         if args.text_placeholders and not placeholder_path.exists():
@@ -263,6 +202,7 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         else:
                             LOGGER.info(log_string + " - SKIPPING")
                             continue
+                    LOGGER.info(log_string)
 
                     if playlist_id and len(playlist["entries"]) > 1:
                         ppa[-1] = f"track={video_index+1}"
@@ -355,46 +295,20 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                             if args.output_format == "mp3":
                                 del ydl.params["keepvideo"]
 
-                    # try:
-                    #     retcode =
-                    # except DownloadError as exc:
-                    #     # LOGGER.info("****************************")
-                    #     # LOGGER.info(exc)
-                    #     # breakpoint()
-                    #     raise
-                    #     # if "blocked" in exc.msg:
-                    #     #     # LOGGER.info(f"DOWNLOAD FAILED: {exc.msg}", )
-                    #     #     failed_downloads.append(video)
-                    #     # else:
-                    #     #     breakpoint()
-                    #     #     raise
-                    # if retcode == 1:
-                    #     breakpoint()
-
                     if not args.text_placeholders:
                         if args.output_format == "m4a":
-                            if "uploader" in video:
+                            if video.get("uploader") is not None:
                                 with preserve_filedate(expected_path):
                                     set_tag_mp4_text(
-                                        expected_path, "uploader", video["uploader"]
+                                        expected_path,
+                                        "uploader",
+                                        video["uploader"],
                                     )
+                            else:
+                                breakpoint()
 
                     if remove_placeholder:
                         os.remove(placeholder_path)
 
-                    if args.use_archives and False:
-                        if not success:
-                            download_state = DownloadStates.DOWNLOAD_FAILED
-                        elif is_duplicate:
-                            download_state = DownloadStates.DUPLICATE_DOWNLOADED
-                        else:
-                            download_state = DownloadStates.ORIGINAL_DOWNLOADED
-                        set_download_state(
-                            video,
-                            channel_playlist_info,
-                            channel_archive_filepath_json,
-                            download_state,
-                            args.output_format,
-                        )
     if failed_downloads:
         raise RuntimeError(f"{len(failed_downloads)} failed downloads")
