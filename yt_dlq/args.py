@@ -43,6 +43,7 @@ class ProgramArgsNamespace(Namespace):  # pylint: disable=too-few-public-methods
     loose_videos_suffix: str | None
     filter_video_title: str | None
     filter_playlist_title: str | None
+    extra_dirs: list[Path]
 
 
 def process_args():
@@ -204,6 +205,12 @@ def process_args():
         "--filter-playlist-title",
         metavar="PATTERN",
         help="Only download playlists whose titles contain $PATTERN",
+    )
+
+    parser.add_argument(
+        "--extra-dirs",
+        type=lambda dirs: [Path(dir.strip()) for dir in dirs.split(",")],
+        help="Comma-separated list of additional directories to check when seeing if a file has already been downloaded",
     )
 
     parsed: ProgramArgsNamespace = parser.parse_args(namespace=ProgramArgsNamespace())

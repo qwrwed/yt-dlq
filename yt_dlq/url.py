@@ -50,6 +50,8 @@ PATTERN_CHANNEL_BASE = (
     rf"https:\/\/(?:www\.)?youtube\.com(?:\/(?:c|channel|user))?\/({PATTERN_ID})"
 )
 
+PATTERN_YOUTUBE = r"^https:\/\/(?:youtu\.be\/|(?:www\.)?youtube\.com)"
+
 URL_CATEGORY_PATTERNS = {
     "channel": rf"^({PATTERN_CHANNEL_BASE})(?:\/featured)?\/?$",
     "channel_releases": rf"^({PATTERN_CHANNEL_BASE}(?:\/releases){PATTERN_QUERY}?)\/?$",
@@ -95,6 +97,10 @@ def parse_url(url: Url) -> dict:
             else:
                 res["url"] = match.group(1)
             break
+    if res["category"] is None:
+        if not re.match(PATTERN_YOUTUBE, url):
+            raise ValueError(f"Could not categorise URL '{url}' (not a valid URL?)")
+        raise ValueError(f"Could not categorise URL '{url}'")
     return res
 
 

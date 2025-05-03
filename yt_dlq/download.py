@@ -79,13 +79,18 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
         channels = all_urls_dict
 
         # create a dict of video ids in the root dir to avoid downloading duplicates
-        videos_in_output_dir = {}
-        for m4a_filepath in args.output_dir.rglob(f"*.{args.output_format}"):
-            match = re.search(r"\[(.*?)\]$", m4a_filepath.stem)
+        videos_in_output_dirs = {}
+        dirs_to_check = [args.output_dir, *args.extra_dirs]
+        found_filepaths = []
+        for dir in dirs_to_check:
+            found_filepaths.extend(list(dir.rglob(f"*.{args.output_format}")))
+
+        for format_filepath in found_filepaths:
+            match = re.search(r"\[(.*?)\]$", format_filepath.stem)
             if not match:
                 continue
             _video_id = match.group(1)
-            videos_in_output_dir[_video_id] = m4a_filepath
+            videos_in_output_dirs[_video_id] = format_filepath
 
         for ch_idx, (_channel_id, channel) in enumerate(channels.items()):
             log_string = (
@@ -192,8 +197,8 @@ def download_all(args: ProgramArgsNamespace, all_urls_dict):
                         LOGGER.info(log_string + " - UNAVAILABLE; SKIPPING")
                         continue
                     remove_placeholder = False
-                    if video["id"] in videos_in_output_dir:
-                        log_string += " - EXISTS IN OUTPUT DIR"
+                    if video["id"] in videos_in_output_dirs:
+                        log_string += " - EXISTS IN OUTPUT DIRS"
                         if args.text_placeholders and not placeholder_path.exists():
                             LOGGER.info(log_string + " - CREATING PLACEHOLDER")
                             make_parent_dir(placeholder_path)
