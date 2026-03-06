@@ -1,8 +1,8 @@
 from utils_python import get_logger_with_class, setup_config_logging
 from yt_dlq.args import process_args
-from yt_dlq.download import download_all
+from yt_dlq.download import Downloader
 from yt_dlq.file import merge_json_files, resolve_json_files
-from yt_dlq.url import get_all_urls_dict
+from yt_dlq.url.info_extractor import get_all_urls_dict
 from yt_dlq.utils import YtdlqLogger
 
 LOGGER = get_logger_with_class(__name__, YtdlqLogger)
@@ -19,7 +19,8 @@ def main():
     else:
         url_info_dict = get_all_urls_dict(args)
     if not args.data_only:
-        download_all(args, url_info_dict)
+        downloader = Downloader(args, url_info_dict)
+        downloader.download_all()
 
 
 if __name__ == "__main__":

@@ -48,7 +48,7 @@ pip install -e .
 
 ## Usage
 Simple usage providing a URL via command line:
-```shell 
+```shell
 yt-dlq "https://www.youtube.com/watch?v=dQw4w9WgXcQ&pp=ygUJcmljayByb2xs"
 ```
 
@@ -94,6 +94,6 @@ options:
   -s JSON_FILE_PREFIX, --json-file-prefix JSON_FILE_PREFIX
                         Prefix for output JSON file name.
 
-Args that start with '--' can also be set in a config file (specified via -c). Config file syntax allows: key=value, flag=true, stuff=[a,b,c] (for details, see syntax at   
+Args that start with '--' can also be set in a config file (specified via -c). Config file syntax allows: key=value, flag=true, stuff=[a,b,c] (for details, see syntax at
 https://goo.gl/R74nmi). In general, command-line values override config file values which override defaults.
 ```

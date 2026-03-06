@@ -1,5 +1,4 @@
 import logging
-import math
 import re
 from collections.abc import Mapping
 from copy import deepcopy
@@ -8,14 +7,16 @@ from pathlib import Path
 from types import TracebackType
 from typing import TypeVar
 
-from utils_python import is_iterable, make_parent_dir
+from utils_python import is_iterable, make_parent_dir, PathInput
+
+from yt_dlp.utils import DownloadError
 
 ROOT_PROJECT_DIR = Path(__file__).parent.parent
 
 
 def get_resolve_filepath(
-    file_path: Path | PathLike = ".",
-    root: Path | PathLike = ROOT_PROJECT_DIR,
+    file_path: PathInput = ".",
+    root: Path | PathLike[str] = ROOT_PROJECT_DIR,
 ):
     if not isinstance(file_path, Path):
         file_path = Path(file_path)
@@ -156,7 +157,13 @@ def sorted_nested_with_entries(obj: T) -> T:
                 return v["index"]
             return k
 
-        for k, v in sorted(obj_copy.items(), key=get_key):
+        try:
+            iterable = sorted(obj_copy.items(), key=get_key)
+        except Exception as exc:
+            breakpoint()
+            pass
+
+        for k, v in iterable:
             if is_iterable(v):
                 iterable_items[k] = sorted_nested_with_entries(v)
             else:
@@ -181,3 +188,34 @@ def matches_filter(
     if pattern is None or re.search(pattern, string):
         return True
     return False
+
+class DownloadErrorPrivateVideo(DownloadError): ...
+class DownloadErrorMembersOnly(DownloadError): ...
+class DownloadErrorCaptchaChallenge(DownloadError): ...
+class DownloadErrorUnavailableVideo(DownloadError): ...
+class DownloadErrorAgeRestricted(DownloadError): ...
+class DownloadErrorTOSViolation(DownloadError): ...
+
+
+def specify_download_error(exc: DownloadError):
+    if exc.msg is None:
+        breakpoint()
+        pass
+        return exc
+    if "Private video" in exc.msg:
+        return DownloadErrorPrivateVideo(*exc.args)
+    if "members-only content" in exc.msg:
+        return DownloadErrorMembersOnly(*exc.args)
+    if "captcha challenge" in exc.msg:
+        return DownloadErrorCaptchaChallenge(*exc.args)
+    if "Video unavailable" in exc.msg:
+        return DownloadErrorUnavailableVideo(*exc.args)
+    if "Sign in to confirm your age." in exc.msg:
+        return DownloadErrorAgeRestricted(*exc.args)
+    if "removed for violating YouTube's Terms of Service" in exc.msg:
+        return DownloadErrorTOSViolation(*exc.args)
+    breakpoint()
+    pass
+    return exc
+
+YOUTUBE_MUSIC = "YouTube Music"

@@ -13,7 +13,7 @@ from copy import deepcopy
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from pprint import pprint
+from pprint import pformat, pprint
 from typing import TYPE_CHECKING, Callable, Optional
 
 from prettyprinter import cpprint
@@ -25,11 +25,18 @@ from yt_dlq.args import ProgramArgsNamespace
 from yt_dlq.file import restrict_filename
 from yt_dlq.patches import patch_extract_metadata_from_tabs, patch_releases_tab
 from yt_dlq.types import PLAYLIST_CATEGORIES, UrlSet
+from yt_dlq.url.utils import *
 from yt_dlq.utils import (
+    DownloadErrorAgeRestricted,
+    DownloadErrorMembersOnly,
+    DownloadErrorPrivateVideo,
+    DownloadErrorTOSViolation,
+    DownloadErrorUnavailableVideo,
     YtdlqLogger,
     hyphenate_date,
     matches_filter,
     sorted_nested_with_entries,
+    specify_download_error,
 )
 
 if TYPE_CHECKING:
@@ -43,165 +50,8 @@ pprint = partial(pprint, sort_dicts=False)
 patch_extract_metadata_from_tabs()
 # patch_releases_tab() # https://github.com/yt-dlp/yt-dlp/issues/6893
 
-PATTERN_ID = r"[@\w\-]+"
-PATTERN_QUERY = r"(?:\?[\w=\&]+)"
-PATTERN_CHANNEL_BASE = (
-    # rf"https:\/\/(?:www\.|music\.)?youtube\.com(?:\/(?:c|channel|user))?\/{PATTERN_ID}"
-    rf"https:\/\/(?:www\.)?youtube\.com(?:\/(?:c|channel|user))?\/({PATTERN_ID})"
-)
 
-PATTERN_YOUTUBE = r"^https:\/\/(?:youtu\.be\/|(?:www\.)?youtube\.com)"
-
-URL_CATEGORY_PATTERNS = {
-    "channel": rf"^({PATTERN_CHANNEL_BASE})(?:\/featured)?\/?$",
-    "channel_releases": rf"^({PATTERN_CHANNEL_BASE}(?:\/releases){PATTERN_QUERY}?)\/?$",
-    "channel_playlists": rf"^({PATTERN_CHANNEL_BASE}(?:\/playlists){PATTERN_QUERY}?)\/?$",
-    "playlist": rf"^(https:\/\/(?:www\.)?youtube\.com\/playlist\?list=({PATTERN_ID}))\/?$",
-    "channel_videos": rf"^({PATTERN_CHANNEL_BASE}(?:\/videos))\/?$",
-    "video": rf"^(https:\/\/(?:youtu\.be\/|(?:www\.)?youtube\.com\/watch\?v=)({PATTERN_ID})){PATTERN_QUERY}?\/?$",
-}
-
-DEFAULT_ALBUM_ARTIST_OVERRIDE_ID = "_playlists"
-DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE = "Various Artists"
-# this is the default "channel"/album artist which will
-#   contain albums created using album override
-# TODO: This will apply to singly downloaded videos as well - consider setting
-#  to uploader if url list has one channel, and only using Various Artists if
-#   multiple channels
-
-
-def read_urls_from_file(filepath: Path, comment_char="#") -> UrlList:
-    with open(filepath) as file:
-        rawlines = file.readlines()
-    url_list = []
-    for rawline in rawlines:
-        line = rawline.strip()
-        if line and line[0] != comment_char:
-            url_list.append(line.split(comment_char)[0].strip())
-    return url_list
-
-
-def parse_url(url: Url) -> dict:
-    res = {
-        "category": None,
-        "id": None,
-        "url": url,
-    }
-    for url_category, pattern in URL_CATEGORY_PATTERNS.items():
-        match = re.match(pattern, url)
-        if match:
-            res["category"] = url_category
-            res["id"] = match.group(2)
-            if url_category == "video":
-                res["url"] = f"https://www.youtube.com/watch?v={res['id']}"
-            else:
-                res["url"] = match.group(1)
-            break
-    if res["category"] is None:
-        if not re.match(PATTERN_YOUTUBE, url):
-            raise ValueError(f"Could not categorise URL '{url}' (not a valid URL?)")
-        raise ValueError(f"Could not categorise URL '{url}'")
-    return res
-
-
-def get_url_category(url: Url) -> str | None:
-    return parse_url(url)["category"]
-
-
-def get_url_id(url: Url) -> str:
-    return parse_url(url)["id"]
-
-
-def categorise_urls(url_list: UrlList) -> UrlCategoryDict:
-    url_dict_categorised: dict[Optional[str], UrlList] = (
-        {"release": {}} | {k: {} for k in URL_CATEGORY_PATTERNS} | {None: {}}
-    )
-    unknown_urls: UrlSet = set()
-    known_urls: UrlSet = set()
-    for url in url_list:
-        if url in (known_urls | unknown_urls):
-            continue
-        url_parsed_info = parse_url(url)
-        url_category = url_parsed_info["category"]
-        url_categorised = url_parsed_info["url"]
-        if url_category is not None:
-            known_urls.add(url)
-            known_urls.add(url_categorised)
-        else:
-            LOGGER.warning(f"URL format not recognised: {url!r}")
-            unknown_urls.add(url)
-        url_dict_categorised[url_category][url_categorised] = ""
-    del url_dict_categorised[None]
-    return url_dict_categorised
-
-
-def retrieve_info(
-    ydl: YoutubeDL,
-    url: str,
-    category: str,
-    counter: Optional[tuple[int, int]] = None,
-    remaining: Optional[int] = None,
-    info_func: Callable = lambda info: info["title"],
-):
-    assert (counter is None) != (
-        remaining is None
-    ), "must provide exactly 1 of 'counter' and 'remaining'"
-    if counter is None:
-        progress = f"{remaining} remaining"
-    else:
-        progress = f"{counter[0]}/{counter[1]}"
-    # LOGGER.info(f"RETRIEVING INFO: {category} {progress} {url!r}")
-    try:
-        info = ydl.extract_info(url, download=False)
-    except Exception as exc:
-        breakpoint()
-        pass
-    LOGGER.info(f"RETRIEVED INFO: {category} {progress} {url!r} | {info_func(info)}")
-    return info
-
-
-def resolve_recursive_playlist_group(
-    playlist_subgroup_url: str, playlist_subgroup_title
-):
-    breakpoint()
-    playlist_group_urls_fixed_path = Path(
-        Path(__file__).parent, "playlist_group_urls_fixed.json"
-    )
-
-    try:
-        with open(playlist_group_urls_fixed_path, "r") as file:
-            playlist_subgroup_urls_fixed = json.load(file)
-    except FileNotFoundError:
-        playlist_subgroup_urls_fixed = {}
-
-    if playlist_subgroup_url in playlist_subgroup_urls_fixed:
-        playlist_subgroup_url_fixed = playlist_subgroup_urls_fixed[
-            playlist_subgroup_url
-        ]
-        LOGGER.info(f"URL resolved using {playlist_group_urls_fixed_path}")
-    else:
-        # TODO: distinguish between interactive and non-interactive?
-        LOGGER.info("ERROR: Youtube served us a broken URL.")
-        LOGGER.info(
-            f"  Go to {playlist_subgroup_url!r}, navigate in the dropdown to {playlist_subgroup_title!r}"
-        )
-        playlist_subgroup_url_fixed = input("  Paste the resulting URL here: ")
-        playlist_subgroup_urls_fixed[playlist_subgroup_url] = (
-            playlist_subgroup_url_fixed
-        )
-        with open(playlist_group_urls_fixed_path, "w+") as file:
-            json.dump(playlist_subgroup_urls_fixed, file, indent=2)
-    return playlist_subgroup_url_fixed
-
-
-def sort_playlist_groups(playlist_groups_resolved):
-    # want "Albums & Singles" playlist group to be downloaded first
-    albums_singles_key = "Albums & Singles"
-    try:
-        albums_singles_url = playlist_groups_resolved.pop(albums_singles_key)
-    except KeyError:
-        return playlist_groups_resolved
-    return {albums_singles_key: albums_singles_url, **playlist_groups_resolved}
+DELIMITER = "%"
 
 
 class YoutubeInfoExtractor:
@@ -211,7 +61,8 @@ class YoutubeInfoExtractor:
             "extract_flat": True,
             "quiet": True,
             "no_warnings": True,
-            # "verbose": True,
+            "verbose": self.args.verbose,
+            "cookiefile": self.args.cookies,
         }
         self.ydl = YoutubeDL(params=ydl_opts)
         self.url_to_channel_id = {}
@@ -224,6 +75,7 @@ class YoutubeInfoExtractor:
         if self.url_info_dict_path:
             loaded_url_info_dict = read_dict_from_file(self.url_info_dict_path)
             if loaded_url_info_dict or allow_empty:
+                LOGGER.info("Loaded info dict from '%s'", self.url_info_dict_path)
                 self.url_info_dict = loaded_url_info_dict
                 self.apply_seen_videos()
 
@@ -255,7 +107,62 @@ class YoutubeInfoExtractor:
     def persist_url_info_dict(self):
         if self.url_info_dict_path is not None:
             url_info_dict_sorted = sorted_nested_with_entries(self.url_info_dict)
+            if not self.url_info_dict_path.exists():
+                LOGGER.info(f"Saving to '{self.url_info_dict_path}'")
             dump_data(url_info_dict_sorted, self.url_info_dict_path)
+
+    @staticmethod
+    def get_uploader_url(video_info, quiet=False):
+        if video_info["uploader_url"] is not None:
+            return video_info["uploader_url"]
+        elif video_info["uploader_url"] is None and video_info["description"] is not None and "Auto-generated by YouTube" in video_info["description"]:
+            return "YouTube Music"
+        if not quiet:
+            LOGGER.error("couldn't get uploader URL")
+        return None
+        # breakpoint()
+
+    @staticmethod
+    def retrieve_channel_info(
+        url: Url,
+        quiet: bool=True,
+    ):
+        channel_info_ydl_opts = {
+            "extract_flat": True,
+            "playlistend": 1,
+            "skip_download": True,
+            "quiet": quiet,
+        }
+
+        keys_to_keep = [
+            "channel",
+            "channel_id",
+            "channel_url",
+            "uploader",
+            "uploader_id",
+            "uploader_url",
+        ]
+
+        channel_info_ydl = YoutubeDL(channel_info_ydl_opts)
+
+        url_category = parse_url(url)["category"]
+        if url_category == "playlist":
+            playlist_info = channel_info_ydl.extract_info(url, download=False)
+            url = playlist_info["entries"][0]["channel_url"]
+
+        url_category = parse_url(url)["category"]
+        LOGGER.info(f"Retrieving channel info for {url}")
+        channel_info_full = channel_info_ydl.extract_info(url, download=False)
+        channel_info: dict[str, str | None] = {k: channel_info_full[k] for k in keys_to_keep}
+
+        if channel_info["uploader_url"] is None:
+            log = f"'{url}' seems to be a Youtube Music auto-generated channel."
+            url = url.replace("www.youtube.com", "music.youtube.com")
+            log += f" Updating it to '{url}'"
+            LOGGER.info(log)
+            channel_info["channel_url"] = url
+
+        return channel_info
 
     def add_playlists_to_url_info_dict(
         self,
@@ -288,7 +195,7 @@ class YoutubeInfoExtractor:
                     f"RETRIEVING INFO: {playlist_category} {i+1}/{len(playlist_urls)} {playlist_url!r}"
                     + (f" ({playlist_title})" if playlist_title else "")
                 )
-                playlist_info = self.ydl.extract_info(playlist_url, download=False)
+                playlist_info = self.get_info(playlist_url)
                 playlist_entries = playlist_info["entries"]
 
                 # set channel properties
@@ -308,18 +215,24 @@ class YoutubeInfoExtractor:
                     ch_id = self.url_to_channel_id[playlist_url]
                     ch_title = self.channel_id_to_channel_title.get(ch_id)
                     ch_url = f"https://www.youtube.com/channel/{ch_id}"
+                # else:
+                #     # channel_info
+                #     ch_id = (
+                #         playlist_info["uploader_id"]
+                #         or playlist_entries[0]["uploader_id"]
+                #     )
+                #     ch_title = (
+                #         playlist_info["uploader"] or playlist_entries[0]["uploader"]
+                #     )
+                #     ch_url = (
+                #         playlist_info["uploader_url"]
+                #         or f"https://www.youtube.com/channel/{ch_id}"
+                #     )
                 else:
-                    ch_id = (
-                        playlist_info["uploader_id"]
-                        or playlist_entries[0]["uploader_id"]
-                    )
-                    ch_title = (
-                        playlist_info["uploader"] or playlist_entries[0]["uploader"]
-                    )
-                    ch_url = (
-                        playlist_info["uploader_url"]
-                        or f"https://www.youtube.com/channel/{ch_id}"
-                    )
+                    channel_info = self.retrieve_channel_info(playlist_url)
+                    ch_id = channel_info["uploader_id"] or channel_info["channel_id"]
+                    ch_title = channel_info["uploader"] or channel_info["channel"]
+                    ch_url = channel_info["uploader_url"] or channel_info["channel_url"]
 
                 # set playlist properties
                 if self.args.album_override:
@@ -383,28 +296,73 @@ class YoutubeInfoExtractor:
                     LOGGER.info(
                         f" RETRIEVING INFO: {playlist_category} video {idx+1}/{len(playlist_entries)} {video_entry['url']!r} ({video_entry['title']})"
                     )
-                    try:
-                        video_info_full = self.ydl.extract_info(
-                            video_entry["url"], download=False
-                        )
-                    except DownloadError as exc:
-                        continue
+                    # try:
+                    #     video_info_full = self.ydl.extract_info(
+                    #         video_entry["url"], download=False
+                    #     )
+                    # except DownloadError as exc:
+                    #     continue
 
-                    video_info = self.get_info(video_entry["url"])
-                    video_dict = {
-                        "id": video_id,
-                        "type": "video",
-                        "title": video_entry["title"],
-                        "url": video_entry["url"],
-                        "upload_date": hyphenate_date(video_info_full["upload_date"]),
-                        "uploader": video_entry["uploader_url"]
-                        or video_entry["channel_url"],
-                        "index": idx + 1,
-                        "music_info": self.music_info_from_description(video_info),
-                        "description": video_info["description"],
-                        "duration": video_info["duration"],
-                        "availability": video_info["availability"],
-                    }
+                    try:
+                        video_info = self.get_info(video_entry["url"])
+                    except DownloadError as exc:
+                        exc_specific = specify_download_error(exc)
+                        availability = None
+                        if isinstance(exc_specific, DownloadErrorPrivateVideo):
+                            LOGGER.error(
+                                f"  PRIVATE VIDEO {video_entry['url']!r} ({video_entry['title']})"
+                            )
+                            availability = "private"
+                        elif isinstance(exc_specific, DownloadErrorMembersOnly):
+                            f"  MEMBERS-ONLY VIDEO {video_entry['url']!r} ({video_entry['title']})"
+                            availability = video_entry.get("availability")
+                        elif isinstance(exc_specific, DownloadErrorAgeRestricted):
+                            f"  AGE-RESTRICTED VIDEO {video_entry['url']!r} ({video_entry['title']})"
+                            availability = "public"
+                        elif isinstance(exc_specific, (DownloadErrorUnavailableVideo, DownloadErrorTOSViolation)):
+                            f"  UNAVAILABLE VIDEO {video_entry['url']!r} ({video_entry['title']})"
+                            availability = "unavailable"
+                        else:
+                            LOGGER.exception(exc)
+                            breakpoint()
+                            pass
+                            raise
+                        if availability is None:
+                            breakpoint()
+                            raise TypeError
+                        video_dict = {
+                            "id": video_id,
+                            "type": "video",
+                            "title": video_entry.get("title"),
+                            "url": video_entry.get("url"),
+                            "upload_date": video_entry.get("upload_date"),
+                            "uploader": self.get_uploader_url(video_entry, quiet=True),
+                            "index": idx + 1,
+                            "music_info": self.music_info_from_description(video_entry),
+                            "description": video_entry.get("description"),
+                            "duration": video_entry.get("duration"),
+                            "availability": availability,
+                        }
+
+                    else:
+                        video_dict = {
+                            "id": video_id,
+                            "type": "video",
+                            "title": video_entry["title"],
+                            "url": video_entry["url"],
+                            # "upload_date": hyphenate_date(video_info_full["upload_date"]),
+                            "upload_date": hyphenate_date(video_info["upload_date"]),
+                            "uploader": self.get_uploader_url(video_info)
+                            or video_entry["channel_url"],
+                            "index": idx + 1,
+                            "music_info": self.music_info_from_description(video_info),
+                            "description": video_info["description"],
+                            "duration": video_info["duration"],
+                            "availability": video_info["availability"],
+                        }
+                        if video_dict["upload_date"] is None:
+                            breakpoint()
+                            pass
 
                     playlist_dict["entries"][video_id] = video_dict
                     self.persist_url_info_dict()  # added video for playlist
@@ -421,9 +379,7 @@ class YoutubeInfoExtractor:
             LOGGER.info(
                 f"RETRIEVING INFO: channel {i+1}/{len(channel_videos_urls)} {channel_videos_url!r}"
             )
-            channel_videos_info = self.ydl.extract_info(
-                channel_videos_url, download=False
-            )
+            channel_videos_info = self.get_info(channel_videos_url)
             channel_videos_entries = channel_videos_info["entries"]
 
             # set channel properties
@@ -440,9 +396,13 @@ class YoutubeInfoExtractor:
             #     ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
             #     ch_url = ""
             else:
-                ch_id = channel_videos_info["uploader_id"]
-                ch_title = channel_videos_info["uploader"]
-                ch_url = channel_videos_info["uploader_url"]
+                # ch_id = channel_videos_info["uploader_id"]
+                # ch_title = channel_videos_info["uploader"]
+                # ch_url = channel_videos_info["uploader_url"]
+                channel_info = self.retrieve_channel_info(channel_videos_url)
+                ch_id = channel_info["uploader_id"] or channel_info["channel_id"]
+                ch_title = channel_info["uploader"] or channel_info["channel"]
+                ch_url = channel_info["uploader_url"] or channel_info["channel_url"]
 
             # set playlist properties
             if self.args.album_override:
@@ -453,6 +413,10 @@ class YoutubeInfoExtractor:
                 pl_id = ""
                 pl_title = ""
                 pl_url = ""
+
+            if ch_id is None:
+                breakpoint()
+                pass
 
             # create or load channel dict
             if ch_id in self.url_info_dict:
@@ -510,9 +474,7 @@ class YoutubeInfoExtractor:
                     f" RETRIEVING INFO: channel video {idx+1}/{len(channel_videos_entries)} {video_entry['url']!r}"
                 )
                 try:
-                    video_info_full = self.ydl.extract_info(
-                        video_entry["url"], download=False
-                    )
+                    video_info_full = self.get_info(video_entry["url"])
                 except DownloadError as exc:
                     continue
                 video_dict = {
@@ -521,11 +483,14 @@ class YoutubeInfoExtractor:
                     "title": video_entry["title"],
                     "url": video_entry["url"],
                     "upload_date": hyphenate_date(video_info_full["upload_date"]),
-                    "uploader": ch_url,
+                    "uploader": self.get_uploader_url(video_info_full),
                     "description": video_info_full["description"],
                     "duration": video_info_full["duration"],
                     "availability": video_info_full["availability"],
                 }
+                if video_dict["upload_date"] is None:
+                    breakpoint()
+                    pass
                 playlist_dict["entries"][video_entry["id"]] = video_dict
                 self.persist_url_info_dict()  # added video for channel
                 self.seen_video_ids.add(video_entry["id"])
@@ -548,8 +513,9 @@ class YoutubeInfoExtractor:
             LOGGER.info(f"RETRIEVING INFO: video {i+1}/{len(video_urls)} {video_url!r}")
             # get info from downloader
             try:
-                video_info = self.ydl.extract_info(video_url, download=False)
+                video_info = self.get_info(video_url)
             except DownloadError as exc:
+                LOGGER.exception(exc)
                 continue
 
             # set channel properties
@@ -566,9 +532,9 @@ class YoutubeInfoExtractor:
             #     ch_title = DEFAULT_ALBUM_ARTIST_OVERRIDE_TITLE
             #     ch_url = ""
             else:
-                ch_id = video_info["uploader_id"]
+                ch_id = video_info["uploader_id"] or video_info["channel_id"]
                 ch_title = video_info["uploader"]
-                ch_url = video_info["uploader_url"]
+                ch_url = video_info["uploader_url"] or video_info["channel_url"].replace("www.youtube.com", "music.youtube.com")
 
             # set playlist properties
             if self.args.album_override:
@@ -579,6 +545,10 @@ class YoutubeInfoExtractor:
                 pl_id = ""
                 pl_title = ""
                 pl_url = ""
+
+            if ch_id is None:
+                breakpoint()
+                pass
 
             # create or load channel dict
             if ch_id in self.url_info_dict:
@@ -614,11 +584,15 @@ class YoutubeInfoExtractor:
                 "title": video_info["title"],
                 "url": video_info["webpage_url"],
                 "upload_date": hyphenate_date(video_info["upload_date"]),
-                "uploader": video_info["uploader_url"],
+                "uploader": self.get_uploader_url(video_info),
+                "music_info": self.music_info_from_description(video_info),
                 "description": video_info["description"],
                 "duration": video_info["duration"],
                 "availability": video_info["availability"],
             }
+            if video_dict["upload_date"] is None:
+                breakpoint()
+                pass
             playlist_dict["entries"][video_id] = video_dict
             self.persist_url_info_dict()  # added video for loose-video
             self.seen_video_ids.add(video_id)
@@ -626,7 +600,7 @@ class YoutubeInfoExtractor:
     def get_info(self, url: str):
         delay_func = lambda x: x * 10
         attempts = 0
-        max_attempts = 3
+        max_attempts = 10
         while True:
             attempts += 1
             try:
@@ -648,8 +622,10 @@ class YoutubeInfoExtractor:
                 LOGGER.info("Retrying after wait (attempt %d)", attempts + 1)
 
     def get_title(self, url: str):
-        category = get_url_category(url)
-        info = self.get_info(url)
+        url_parse_result = parse_url(url)
+        category = url_parse_result["category"]
+        url_resolved = url_parse_result["url"]
+        info = self.get_info(url_resolved)
         # dump_data(info)
 
         uploader_id = info.get("uploader_id")
@@ -665,17 +641,17 @@ class YoutubeInfoExtractor:
         {k: v for k, v in info.items() if type(v) not in {dict, list, set}}
         match category:
             case "channel":
-                title = f"{channel_name} channel"
+                title = f"{channel_name}{DELIMITER}channel"
             case "channel_releases":
-                title = f"{channel_name} releases"
+                title = f"{channel_name}{DELIMITER}releases"
             case "channel_playlists":
-                title = f"{channel_name} playlists"
+                title = f"{channel_name}{DELIMITER}playlists"
             case "playlist":
-                title = f"{channel_name} playlist {item_title}"
+                title = f"{channel_name}{DELIMITER}playlist{DELIMITER}{item_title}"
             case "channel_videos":
-                title = f"{channel_name} videos"
+                title = f"{channel_name}{DELIMITER}videos"
             case "video":
-                title = f"{channel_name} video {item_title}"
+                title = f"{channel_name}{DELIMITER}video{DELIMITER}{item_title}"
             case _:
                 title = item_title
         return title
@@ -689,15 +665,30 @@ class YoutubeInfoExtractor:
         if (video_description := info.get("description")) is None:
             return info_out
         else:
-            # Youtube Music Auto-generated description (modified from yt-dlp)
+            # # Youtube Music Auto-generated description (modified from yt-dlp)
+            # mobj = re.search(
+            #     r"""(?xs)
+            #         (?P<track>[^·\n]+)·(?P<artist>[^\n]+)\n+
+            #         (?P<album>[^\n]+)
+            #         (?:.+?℗\s*(?P<release_year>\d{4})(?!\d))?
+            #         (?:.+?Released on\s*:\s*(?P<release_date>\d{4}-\d{2}-\d{2}))?
+            #         (.+?\nArtist\s*:\s*(?P<clean_artist>[^\n]+))?
+            #         .+\nAuto-generated\ by\ YouTube\.\s*$
+            #     """,
+            #     video_description,
+            # )
+
+            # Youtube Music Auto-generated description (from yt-dlp)
             mobj = re.search(
                 r"""(?xs)
-                    (?P<track>[^·\n]+)·(?P<artist>[^\n]+)\n+
-                    (?P<album>[^\n]+)
+                    (?=(?P<track>[^\n·]+))(?P=track)·
+                    (?=(?P<artist>[^\n]+))(?P=artist)\n+
+                    (?=(?P<album>[^\n]+))(?P=album)\n
                     (?:.+?℗\s*(?P<release_year>\d{4})(?!\d))?
-                    (?:.+?Released on\s*:\s*(?P<release_date>\d{4}-\d{2}-\d{2}))?
-                    (.+?\nArtist\s*:\s*(?P<clean_artist>[^\n]+))?
-                    .+\nAuto-generated\ by\ YouTube\.\s*$
+                    (?:.+?Released\ on\s*:\s*(?P<release_date>\d{4}-\d{2}-\d{2}))?
+                    (.+?\nArtist\s*:\s*
+                        (?=(?P<clean_artist>[^\n]+))(?P=clean_artist)\n
+                    )?.+\nAuto-generated\ by\ YouTube\.\s*$
                 """,
                 video_description,
             )
@@ -733,13 +724,20 @@ class YoutubeInfoExtractor:
             channel_urls.pop(url)
             try:
                 url_releases = f"{url}/releases"
-                self.ydl.extract_info(url_releases, download=False)
+                self.get_info(url_releases)
                 if "release" not in url_dict_new:
                     url_dict_new = {"channel_releases": [], **url_dict_new}
-                url_dict_new["channel_releases"].append(url_releases)
+                # url_dict_new["channel_releases"].append(url_releases)
+                url_dict_new["channel_releases"][url_releases] = ""
             except DownloadError as exc:
                 pass
-            url_dict_new["channel_playlists"][f"{url}/playlists"] = ""
+            try:
+                url_playlists = f"{url}/playlists"
+                self.get_info(url_playlists)
+                url_dict_new["channel_playlists"][url_playlists] = ""
+            except DownloadError as exc:
+                pass
+
             url_dict_new["channel_videos"][f"{url}/videos"] = ""
         urls_from_channel = {}
         for category in PLAYLIST_CATEGORIES:
@@ -751,6 +749,7 @@ class YoutubeInfoExtractor:
                     self.url_to_channel_id[entry_url] = channel_category_info[
                         "uploader_id"
                     ]
+                    # print(self.url_to_channel_id)
                     self.channel_id_to_channel_title[
                         channel_category_info["uploader_id"]
                     ] = channel_category_info["uploader"]
@@ -841,7 +840,7 @@ class YoutubeInfoExtractor:
 
     def fill_metadata(self):
         for channel_info in self.url_info_dict.values():
-            for playlist_info in channel_info["entries"].values():
+            for playlist_id, playlist_info in channel_info["entries"].items():
                 for field_name in ("album", "release_year"):
                     try:
                         fields_debug = {
@@ -858,32 +857,39 @@ class YoutubeInfoExtractor:
 
                     fields_list = list(fields_debug.values())
                     fields_set = set(fields_debug.values())
-                    if len(fields_set) > 1:
-                        [(most_common_field, most_common_field_count)] = Counter(
-                            fields_list
-                        ).most_common(1)
-
-                        if most_common_field_count > 1:
-                            field = most_common_field
-                            LOGGER.warning(
-                                f"Got conflicting {field_name!r}: {fields_set}. choosing most common: {field}"
-                            )
-                        else:
-                            field = "AAAAAA"
-                            LOGGER.warning(
-                                f"Got conflicting {field_name!r}: {fields_set}. No most common: using {field=}"
-                            )
-                    elif len(fields_set) == 1:
+                    # def get_most_common_field_and_count():
+                    #     if len(fields_set) > 1:
+                    #         [(most_common_field, most_common_field_count)] = Counter(fields_list).most_common(1)
+                    #         if most_common_field_count > 1:
+                    #             return most_common_field
+                    #     return None
+                    # if (field := get_most_common_field_and_count()) is not None:
+                    #     LOGGER.warning(
+                    #         f"Got conflicting {field_name!r}: {fields_set}. choosing most common: {field}"
+                    #     )
+                    # el
+                    if len(fields_set) == 1:
                         field = fields_set.pop()
                     elif field_name == "album" and playlist_info["title"]:
                         field = playlist_info["title"]
+                        if len(fields_set) > 1:
+                            LOGGER.warning(
+                                f"Got conflicting {field_name!r}: {fields_set}. No most common: using {field=} for {field_name=}"
+                            )
                     else:
+                        if field_name == "album" and playlist_info["title"]:
+                            LOGGER.warning(f"no {field_name}!")
+                            breakpoint()
+                            pass
                         continue
                     for video_info in playlist_info["entries"].values():
-                        video_info.setdefault("music_info", {})[field_name] = field
+                        try:
+                            video_info.setdefault("music_info", {})[field_name] = field
+                        except Exception as exc:
+                            import pdb; pdb.set_trace()
+                            pass
                     playlist_info.setdefault("music_info", {})[field_name] = field
                     self.persist_url_info_dict()  # filled metadata for playlist
-
 
 def get_hash(data: any):
     data_string = json.dumps(data)
@@ -892,11 +898,11 @@ def get_hash(data: any):
     return data_hashed
 
 
-JSON_URLS_FILESTEM_DELIMITER = " "
 JSON_FILE_VERSION = 1
 
 
 def get_all_urls_dict(args: ProgramArgsNamespace):
+    LOGGER.info("Getting URL info")
     if args.batchfile:
         urls_input_list = read_urls_from_file(args.batchfile)
     else:
@@ -910,14 +916,24 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
         archive_dir.mkdir(parents=True, exist_ok=True)
 
         json_file_stem_prefix = datetime.now().replace(microsecond=0).isoformat()
+        json_file_stem_prefix = json_file_stem_prefix.replace(":", "-")
         if args.json_file_prefix is not None:
             json_file_stem_suffix = restrict_filename(args.json_file_prefix)
         else:
             if len(urls_input_list) == 1:
-                json_file_stem_suffix = yie.get_title(urls_input_list[0])
+                [url] = urls_input_list
+                LOGGER.info("Getting title...")
+                try:
+                    json_file_stem_suffix = yie.get_title(url)
+                except DownloadError as exc:
+                    exc_specific = specify_download_error(exc)
+                    raise DownloadError(f"Only got one URL, but it was inaccessible. Video '{url}' cannot be downloaded.") from exc_specific
+                    LOGGER.error(f"Unexpected {type(exc).__name__}: {exc.msg}")
+                    breakpoint()
+                    pass
             else:
                 json_file_stem_suffix = get_hash(urls_input_list)[:10]
-        json_file_stem_suffix += f".v{JSON_FILE_VERSION}"
+        json_file_stem_suffix += f"{DELIMITER}v{JSON_FILE_VERSION}"
 
         if json_file_stem_prefix is None:
             json_output_filepath = Path(archive_dir, json_file_stem_suffix).with_suffix(
@@ -937,7 +953,7 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
             else:
                 json_output_filepath = Path(
                     archive_dir,
-                    f"{json_file_stem_prefix}{JSON_URLS_FILESTEM_DELIMITER}{json_file_stem_suffix}",
+                    f"{json_file_stem_prefix}{DELIMITER}{json_file_stem_suffix}",
                 )
 
         if not json_output_filepath.name.endswith(".json"):
@@ -952,12 +968,16 @@ def get_all_urls_dict(args: ProgramArgsNamespace):
         atexit.register(
             lambda: show_retrieved_urls_filepath(json_output_filepath, args)
         )
-
+    if not url_info_dict:
+        LOGGER.warning("URL info dict is empty. No URLs will be saved or downloaded.")
     return url_info_dict
 
 
-def show_retrieved_urls_filepath(json_output_filepath, args):
-    if not json_output_filepath:
+def show_retrieved_urls_filepath(
+    json_output_filepath: Path,
+    args,
+):
+    if not json_output_filepath or not json_output_filepath.is_file():
         return
     LOGGER.info(
         "\nTo skip URL retrieval next time, run:\n"
