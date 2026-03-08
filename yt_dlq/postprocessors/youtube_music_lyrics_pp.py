@@ -27,6 +27,7 @@ def format_lyrics_line(lyric_line: LyricLine) -> str:
 def get_lyrics(
     video_id: str,
     synced_only: bool = False,
+    line_break: str = "\r\n"
 ) -> str | None:
     ytmusic = YTMusic()
     watch_playlist_info = ytmusic.get_watch_playlist(video_id)
@@ -50,7 +51,7 @@ def get_lyrics(
         lyrics_result = ytmusic.get_lyrics(lyrics_id, timestamps=False)
         lyrics_full = lyrics_result["lyrics"]
 
-    return lyrics_full
+    return lyrics_full.replace("\n", line_break)
 
 
 class YouTubeMusicLyricsPP(PostProcessor):
@@ -65,6 +66,6 @@ class YouTubeMusicLyricsPP(PostProcessor):
             return [], information
 
         set_tag_text_mp4(
-            Path(information["filepath"]), "lyrics", lyrics.replace("\n", "\r\n")
+            Path(information["filepath"]), "lyrics", lyrics
         )
         return [], information
