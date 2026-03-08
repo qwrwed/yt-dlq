@@ -50,12 +50,14 @@ def extract_metadata_from_tabs_with_subtitle(self, item_id, data):
 
 
 def patch_extract_metadata_from_tabs():
-    YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs_original = (
-        YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs
-    )
-    YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs = (
-        extract_metadata_from_tabs_with_subtitle
-    )
+    # Only patch if not already patched
+    if not hasattr(YoutubeTabBaseInfoExtractor, '_extract_metadata_from_tabs_original'):
+        YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs_original = (
+            YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs
+        )
+        YoutubeTabBaseInfoExtractor._extract_metadata_from_tabs = (
+            extract_metadata_from_tabs_with_subtitle
+        )
 
 
 def patch_releases_tab():
