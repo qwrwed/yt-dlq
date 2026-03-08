@@ -606,9 +606,10 @@ class YoutubeInfoExtractor:
             try:
                 return self.ydl.extract_info(url, download=False)
             except Exception as exc:
+                msg = getattr(exc, "msg", str(exc))
                 if (
                     "Video unavailable. This content isn't available, try again later."
-                    not in exc.msg
+                    not in msg
                 ):
                     raise
                 if attempts >= max_attempts:
